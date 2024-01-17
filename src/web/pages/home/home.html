@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;800&display=swap"
+          rel="stylesheet"
+        />
+        <link rel="stylesheet" href="src/web/pages/home/home.css">
+        <link rel="stylesheet" href="src/web/static/global.css">
+        <title>Document</title>
+    </head>
+    <body>
+        <div>
+            country: {{ v0 country }}
+        </div>
+        <div>
+            phone number: {{ v2 phone_prefix }} {{ v1 phone_number }}
+        </div>
+        <ul>
+            {{ for0 menu_list }}
+            <li>{{ for0->v0 menu_item }}</li>
+            {{ end for0 }}
+        </ul>
+        <script defer src="src/web/pages/home/home.js"></script>
+        <!-- <div class="rain">
+            <div class="terminal">
+                <div class="terminal__text">
+                    <section>
+                        <h2>su --info</h2>
+                        <ul>
+                            <li>roy salazar</li>
+                            <li>software engineer</li>
+                            <li>04y experience</li>
+                            <li class="terminal__text--location">helsinki</li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h2>ls lang</h2>
+                        <ul>
+                            <li>Assembly</li>
+                            <li>C</li>
+                            <li>Golang</li>
+                            <li class="terminal__text--bold">Typescript</li>
+                        </ul>
+                    </section>
+                    <section>
+                        <h2>ls img -r</h2>
+                    </section>
+                </div>
+                <div class="avatar">
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--colored"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                    <div class="picture picture--dark"></div>
+                </div>
+            </div>
+            <div
+                class="terminal__recursive"
+                style="
+                  opacity: 30%;
+                  margin-left: calc(10vw + (2.5vw * 1));
+                  margin-top: calc(10vh + (5vh * 1));
+                "
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 2)); margin-top: calc(10vh + (5vh * 2));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 3)); margin-top: calc(10vh + (5vh * 3));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 4)); margin-top: calc(10vh + (5vh * 4));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 5)); margin-top: calc(10vh + (5vh * 5));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 6)); margin-top: calc(10vh + (5vh * 6));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 7)); margin-top: calc(10vh + (5vh * 7));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 8)); margin-top: calc(10vh + (5vh * 8));"
+            ></div>
+            <div
+                class="terminal__recursive"
+                style="opacity: 30%; margin-left: calc(10vw + (2.5vw * 9)); margin-top: calc(10vh + (5vh * 9));"
+            ></div>
+            <div class="crack">
+                <div class="crack__line-01"></div>
+                <div class="crack__line-02">
+                    <div class="crack__line-03"></div>
+                </div>
+                <div class="crack__line-04"></div>
+            </div>
+            <div class="rain__background">
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+                <div class="rain__vertical-gap"></div>
+                <div class="rain__horizontal-gap"></div>
+            </div>
+        </div>
+        <script>
+            function randomNumber(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            document.addEventListener("DOMContentLoaded", function () {
+                const horizontalGaps = document.getElementsByClassName("rain__horizontal-gap");
+
+                for (let i = 0; i < horizontalGaps.length; i++) {
+                    const gap = horizontalGaps[i];
+
+                    gap.style.right = `calc(${i} * 1.5vw * 2)`;
+
+                    const number = randomNumber(0, 100);
+                    gap.style.top = `${number}vh`;
+                }
+            });
+        </script> -->
+    </body>
+</html>
