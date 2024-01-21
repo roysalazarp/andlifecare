@@ -7,7 +7,7 @@ BIN_DIR = $(BUILD_DIR)/bin
 OBJ_DIR = $(BUILD_DIR)/obj
 ASSEMBLY_DIR = $(BUILD_DIR)/asm
 
-EXECUTABLE = $(BIN_DIR)/web_server
+EXECUTABLE = $(BIN_DIR)/andlifecare
 SOURCES = $(shell find $(SRC_DIR) -type f -name "*.c")
 OBJECTS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SOURCES))
 ASSEMBLY_FILES = $(patsubst $(SRC_DIR)/%.c, $(ASSEMBLY_DIR)/%.s, $(SOURCES))
