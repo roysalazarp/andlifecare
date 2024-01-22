@@ -10,11 +10,12 @@ void te_log_error(const char *message) {
 
 char *te_substring_address_find(const char *substring, const char *string, unsigned int start_from_position, int direction) {
     if (string == NULL || substring == NULL) {
+        te_log_error("string or substring is NULL");
         return NULL;
     }
 
-    size_t string_length = strlen(string) + 1;
-    size_t substring_length = strlen(substring); /* we only want characters */
+    size_t string_length = strlen(string) + 1; /* count null-terminator as well */
+    size_t substring_length = strlen(substring);
 
     if (substring_length > string_length) {
         te_log_error("substring can't be greater than string");
@@ -49,6 +50,7 @@ char *te_substring_address_find(const char *substring, const char *string, unsig
 /* null-terminates string after modifying */
 int te_substring_copy_into_string_at_memory_space(const char *substring, char **string, const char *begin_address, const char *end_address) {
     if (*string == NULL || begin_address == NULL || end_address == NULL || substring == NULL) {
+        te_log_error("One of the arguments is NULL");
         return -1;
     }
 
@@ -61,26 +63,26 @@ int te_substring_copy_into_string_at_memory_space(const char *substring, char **
     }
 
     size_t value_length = strlen(substring); /* we only want characters */
-    size_t remaining_string_length = strlen(*string + end_index) + 1;
+    size_t remaining_string_length = strlen(*string + end_index);
 
     char *after;
-    after = malloc(remaining_string_length * (sizeof *after));
+    after = malloc(remaining_string_length * (sizeof *after) + 1);
     if (after == NULL) {
         te_log_error("Failed to re-allocate memory for after\n");
         return -1;
     }
 
-    strncpy(after, *string + end_index, remaining_string_length);
-    after[remaining_string_length - 1] = '\0';
+    strncpy(after, *string + end_index, remaining_string_length + 1);
+    after[remaining_string_length] = '\0';
 
-    *string = (char*)realloc(*string, (begin_index + value_length + remaining_string_length) * (sizeof **string));
+    *string = (char*)realloc(*string, (begin_index + value_length + remaining_string_length + 1) * (sizeof **string));
     if (*string == NULL) {
         te_log_error("Failed to re-allocate memory for new_string\n");
         return -1;
     }
 
     /* TODO: Check for error in memmove and strncpy */
-    memmove(*string + begin_index + value_length, after, remaining_string_length);
+    memmove(*string + begin_index + value_length, after, remaining_string_length + 1);
     strncpy(*string + begin_index, substring, value_length);
 
     free(after);

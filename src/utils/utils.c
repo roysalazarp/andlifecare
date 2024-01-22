@@ -11,7 +11,7 @@ void log_error(const char *message) {
     fprintf(stderr, "Error code: %d\n", errno);
 }
 
-long calculate_file_bytes_length(char *absolute_file_path) {
+long calculate_file_size(char *absolute_file_path) {
     FILE* file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
@@ -38,7 +38,7 @@ long calculate_file_bytes_length(char *absolute_file_path) {
     return file_size;
 }
 
-int read_file(char *file_content, char *absolute_file_path, long file_size) {
+int read_file(char *buffer, char *absolute_file_path, long file_size) {
     FILE* file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
@@ -46,7 +46,7 @@ int read_file(char *file_content, char *absolute_file_path, long file_size) {
         return -1;
     }
 
-    size_t bytes_read = fread(file_content, sizeof(char), (size_t)file_size, file);
+    size_t bytes_read = fread(buffer, sizeof(char), (size_t)file_size, file);
     if (bytes_read != (size_t)file_size) {
         if (feof(file)) {
             log_error("End of file reached before reading all elements\n");
@@ -89,7 +89,7 @@ int build_absolute_path(char *buffer, const char *path) {
         return -1;
     }
 
-    /* snprintf automatically appends null-terminator */
+    /* sprintf automatically appends null-terminator */
     if (sprintf(buffer, "%s%s", cwd, path) < 0) {
         log_error("Formatted string truncated\n");
         free(cwd);
@@ -103,6 +103,7 @@ int build_absolute_path(char *buffer, const char *path) {
     return 0;
 }
 
+/*
 size_t calculate_combined_strings_length(unsigned int num_strings, ...) {
     size_t error_value = 0;
     
@@ -131,6 +132,7 @@ size_t calculate_combined_strings_length(unsigned int num_strings, ...) {
 
     return sum;
 }
+*/
 
 /*
 char *retrieve_header(const char *request, const char *key) {

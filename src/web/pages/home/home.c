@@ -20,16 +20,13 @@ int home_get(int client_socket, char *request) {
     
     template_path[0] = '\0';
 
-    char path[] = "src/web/pages/home/home.html";
-
-    if (sprintf(template_path, "%s%s", CWD, path) < 0) {
-        log_error("Formatted string truncated\n");
+    if (build_absolute_path(template_path, "/src/web/pages/home/home.html") == -1) {
         free(template_path);
         template_path = NULL;
         return -1;
     }
 
-    long template_length = calculate_file_bytes_length(template_path);
+    long template_length = calculate_file_size(template_path);
     if (template_length == -1) {
         free(template_path);
         template_path = NULL;
@@ -43,8 +40,8 @@ int home_get(int client_socket, char *request) {
     size_t response_headers_length = strlen(response_headers) * sizeof(char);
 
     char *response;
-    size_t original_response_length = ((size_t)(template_length)) + response_headers_length;
-    response = (char*)malloc(original_response_length * (sizeof *response) + 1);
+    size_t pre_rendering_response_length = ((size_t)(template_length)) + response_headers_length;
+    response = (char*)malloc(pre_rendering_response_length * (sizeof *response) + 1);
 
     if (response == NULL) {
         log_error("Failed to allocate memory for response\n");
@@ -68,7 +65,7 @@ int home_get(int client_socket, char *request) {
     free(template_path);
     template_path = NULL;
 
-    response[original_response_length] = '\0';
+    response[pre_rendering_response_length] = '\0';
 
     char *country[] = { "v0", "Finland" };
     if (te_single_substring_swap(country[0], country[1], &response) == -1) {
@@ -98,7 +95,9 @@ int home_get(int client_socket, char *request) {
         return -1;
     }
 
-    if (send(client_socket, response, strlen(response), 0) == -1) {
+    size_t post_rendering_response_length = strlen(response) * sizeof(char);
+
+    if (send(client_socket, response, post_rendering_response_length, 0) == -1) {
         log_error("Failed send HTTP response\n");
         free(response);
         response = NULL;

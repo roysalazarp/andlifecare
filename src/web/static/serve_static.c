@@ -18,20 +18,17 @@ int serve_static(int client_socket, char *path, const char *response_headers, si
 
     file_path[0] = '\0';
 
-    if (sprintf(file_path, "%s%s", CWD, path) < 0) {
-        log_error("Formatted string truncated\n");
-        return -1;
-    }
+    if (build_absolute_path(file_path, path) == -1) return -1;
 
-    long file_length = calculate_file_bytes_length(file_path);
-    if (file_length == -1) {
+    long file_size = calculate_file_size(file_path);
+    if (file_size == -1) {
         free(file_path);
         file_path = NULL;
         return -1;
     }
 
     char *response;
-    size_t response_length = ((size_t)(file_length)) + response_headers_length;
+    size_t response_length = ((size_t)(file_size)) + response_headers_length;
     response = (char*)malloc(response_length * (sizeof *response) + 1);
     if (response == NULL) {
         log_error("Failed to allocate memory for response\n");
@@ -42,9 +39,11 @@ int serve_static(int client_socket, char *path, const char *response_headers, si
 
     response[0] = '\0';
 
+    /* Add the response headers to buffer */
     strcpy(response, response_headers);
 
-    if (read_file(response + response_headers_length, file_path, file_length) == -1) {
+    /* Add the file contents to buffer */
+    if (read_file(response + response_headers_length, file_path, file_size) == -1) {
         free(file_path);
         file_path = NULL;
         free(response);

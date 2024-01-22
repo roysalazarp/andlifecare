@@ -17,12 +17,12 @@ char *url;
 int server_socket;
 int client_socket;
 
-/**
- * @brief Signal handler for SIGINT (Ctrl+C)
- */
 void sigint_handler(int signo) {
+    /**
+     * SIGINT (Ctrl+C) for graceful server exit, required by valgrind to report memory leaks.
+     */
     if (signo == SIGINT) {
-        printf("\nReceived SIGINT, shutting down...\n");
+        printf("\nReceived SIGINT, exiting...\n");
         close(server_socket);
         close(client_socket);
         free(url);
@@ -34,22 +34,17 @@ void sigint_handler(int signo) {
 }
 
 /**
- * @brief Check if a file path has a specified extension.
- *
- * @param path The file path.
- * @param extension The target file extension.
- * 
- * @return 0 if the file has the specified extension, 1 otherwise.
+ * @return 0 if the file path has the specified extension, 1 otherwise.
  */
-unsigned int filetype_request(const char *path, const char *extension) {
+unsigned int has_file_extension(const char *file_path, const char *extension) {
     size_t extension_length = strlen(extension) + 1;
-    size_t path_length = strlen(path) + 1;
+    size_t path_length = strlen(file_path) + 1;
     
     if (extension_length > path_length) {
         return 1;
     }
 
-    if (strncmp(path + path_length - extension_length, extension, extension_length) == 0) {
+    if (strncmp(file_path + path_length - extension_length, extension, extension_length) == 0) {
         return 0;
     }
     
@@ -135,12 +130,13 @@ int main() {
         const char *second_space = strchr(first_space + 1, ' ');
 
         size_t method_length = first_space - request;
+        /**
+         * HTTP method will never be longer than 7 characters
+         */
         char method[8];
         
-        /** 
-         * Allocate URL memory in the heap (as opposed to the stack) due to the varying nature of URLs:
-         * - 'page requests' typically have relatively short URLs.
-         * - 'partial update requests' may involve longer URLs, and using a large buffer in the stack would be a waste.
+        /**
+         * Request headers -> request line -> url will refer to src/web/pages (relatively short url) or pages partial updates (may be a long url)
          */
         size_t url_length = second_space - (first_space + 1);
         url = malloc(url_length * (sizeof *url) + 1);
@@ -160,7 +156,7 @@ int main() {
         strncpy(url, first_space + 1, url_length);
         url[url_length] = '\0';
 
-        if (filetype_request(url, ".css") == 0 && strcmp(method, "GET") == 0) {
+        if (has_file_extension(url, ".css") == 0 && strcmp(method, "GET") == 0) {
             char response_headers[] =   "HTTP/1.1 200 OK\r\n"
                                         "Content-Type: text/css\r\n"
                                         "\r\n";
@@ -176,7 +172,7 @@ int main() {
             }
         }
 
-        if (filetype_request(url, ".js") == 0 && strcmp(method, "GET") == 0) {
+        if (has_file_extension(url, ".js") == 0 && strcmp(method, "GET") == 0) {
             char response_headers[] =   "HTTP/1.1 200 OK\r\n"
                                         "Content-Type: application/javascript\r\n"
                                         "\r\n";
