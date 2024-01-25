@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <linux/limits.h>
+#include <libpq-fe.h>
 
 #include "utils/utils.h"
 #include "web/request_handlers.h"
@@ -16,6 +18,14 @@ char *request;
 char *url;
 int server_socket;
 int client_socket;
+    
+typedef struct {
+    char DB_NAME[12];
+    char DB_USER[16];
+    char DB_PASSWORD[9];
+    char DB_HOST[10];
+    char DB_PORT[5];
+} ENV;
 
 void sigint_handler(int signo) {
     /**
@@ -54,6 +64,83 @@ unsigned int has_file_extension(const char *file_path, const char *extension) {
 int main() {
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
         log_error("Failed to set up signal handler\n");
+        exit(EXIT_FAILURE);
+    }
+
+    char *env_path;
+    env_path = (char*)malloc(PATH_MAX * (sizeof *env_path) + 1);
+    if (env_path == NULL) {
+        log_error("Failed to allocate memory for env_path\n");
+        return -1;
+    }
+    
+    env_path[0] = '\0';
+
+    if (build_absolute_path(env_path, "/.env") == -1) {
+        free(env_path);
+        env_path = NULL;
+        return -1;
+    }
+
+    const char *keywords[] = { "dbname", "user", "password", "host", "port", NULL };
+
+    ENV env;
+
+    if (load_values_from_file(&env, env_path) == -1) {
+        free(env_path);
+        env_path = NULL;
+        log_error("Failed to load env variables from file\n");
+        exit(EXIT_FAILURE);
+    }
+
+    free(env_path);
+    env_path = NULL;
+
+    /*
+    printf("DB_NAME: %s\n", env.DB_NAME);
+    printf("DB_USER: %s\n", env.DB_USER);
+    printf("DB_PASSWORD: %s\n", env.DB_PASSWORD);
+    printf("DB_HOST: %s\n", env.DB_HOST);
+    printf("DB_PORT: %s\n", env.DB_PORT);
+    */
+
+    const char *values[5];
+    values[0] = env.DB_NAME;
+    values[1] = env.DB_USER;
+    values[2] = env.DB_PASSWORD;
+    values[3] = env.DB_HOST;
+    values[4] = env.DB_PORT;
+
+    PGconn *conn = PQconnectdbParams(keywords, values, 0);
+        
+    if (PQstatus(conn) == CONNECTION_OK) {
+        printf("Connection established successfully!\n");
+
+        /* Perform database operations or other tasks */
+        PGresult *result = PQexec(conn, "SELECT * FROM app.users");
+        
+        if (PQresultStatus(result) == PGRES_TUPLES_OK) {
+            int numRows = PQntuples(result);
+            int numCols = PQnfields(result);
+
+            printf("Query returned %d rows and %d columns:\n", numRows, numCols);
+
+            int i;
+            int j;
+            for (i = 0; i < numRows; ++i) {
+                for (j = 0; j < numCols; ++j) {
+                    printf("%s\t", PQgetvalue(result, i, j));
+                }
+                printf("\n");
+            }
+        } else {
+            fprintf(stderr, "Query execution failed: %s\n", PQerrorMessage(conn));
+        }
+
+        /* Close the connection when done */
+        PQfinish(conn);
+    } else {
+        fprintf(stderr, "Connection failed: %s\n", PQerrorMessage(conn));
         exit(EXIT_FAILURE);
     }
 

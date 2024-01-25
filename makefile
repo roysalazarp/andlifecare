@@ -1,5 +1,6 @@
 CC = gcc
-CFLAGS = -std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -pedantic -g
+CFLAGS = -std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -pedantic -g -I/usr/include/postgresql
+LDFLAGS = -L/usr/include/postgresql -lpq
 
 SRC_DIR = src
 BUILD_DIR = build
@@ -15,7 +16,7 @@ ASSEMBLY_FILES = $(patsubst $(SRC_DIR)/%.c, $(ASSEMBLY_DIR)/%.s, $(SOURCES))
 all: $(EXECUTABLE) $(ASSEMBLY_FILES)
 
 $(EXECUTABLE): $(OBJECTS) | $(BIN_DIR)
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)

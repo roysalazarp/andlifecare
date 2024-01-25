@@ -5,6 +5,10 @@
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <unistd.h>
+#include <stddef.h>
+#include <ctype.h>
+
+#define MAX_LINE_LENGTH 100
 
 void log_error(const char *message) {
     perror(message);
@@ -100,6 +104,58 @@ int build_absolute_path(char *buffer, const char *path) {
     free(cwd);
     cwd = NULL;
 
+    return 0;
+}
+
+/**
+ * @brief      Given the file path of a file with KEY=value pairs and a set of keywords,
+ *             fill the corresponding fields in the structure with the associated values.
+ *             If a line starts with a "#" ignore it, it is a comment.
+ * 
+ * @param[out] structure The structure to fill.
+ * @param      path      The path to the file.
+ * @return     0 if the values are successfully retrieved, -1 otherwise.
+ */
+int load_values_from_file(void *structure, const char *path) {
+    FILE *file = fopen(path, "r");
+    if (file == NULL) {
+        log_error("Error opening file\n");
+        return -1;
+    }
+
+    char line[MAX_LINE_LENGTH];
+    size_t structure_element_offset = 0;
+
+    unsigned int read_count = 0;
+
+    while (fgets(line, sizeof(line), file) != NULL) {
+        char *hash_position = strchr(line, '#');
+        if (hash_position != NULL) {
+            *hash_position = '\0'; /* Truncate the string at the position of the "#" */
+        }
+
+        const char *equal_sign = strchr(line, '=');
+        if (equal_sign == NULL) continue;
+        
+        equal_sign++; /* Move past the '=' character */
+
+        size_t value_char_position = 0;
+
+        /* Extract characters until a space, tab, null terminator, or newline is encountered */
+        while (*equal_sign != '\0' && !isspace((unsigned char)*equal_sign)) {
+            ((char *)structure)[structure_element_offset + value_char_position] = *equal_sign;
+            value_char_position++;
+            equal_sign++;
+        }
+        
+        ((char *)structure)[structure_element_offset + value_char_position] = '\0';
+
+        structure_element_offset += value_char_position + 1;
+        read_count++;
+    }
+
+    /* Clean up and return -1 if any keyword is not found */
+    fclose(file);
     return 0;
 }
 

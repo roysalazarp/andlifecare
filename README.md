@@ -25,3 +25,5 @@ Debian 12
 - Snap
 - NGINX
 - Certbot
+- PostgreSQL 16
+- libpq-dev
