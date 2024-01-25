@@ -107,6 +107,36 @@ int build_absolute_path(char *buffer, const char *path) {
     return 0;
 }
 
+int file_content_to_string(char *buffer, size_t buffer_size, const char* path_from_project_root) {
+    char *full_path;
+    full_path = (char*)malloc(PATH_MAX * (sizeof *full_path) + 1);
+    if (full_path == NULL) {
+        log_error("Failed to allocate memory for full_path\n");
+        return -1;
+    }
+    
+    full_path[0] = '\0';
+
+    if (build_absolute_path(full_path, path_from_project_root) == -1) {
+        free(full_path);
+        full_path = NULL;
+        return -1;
+    }
+
+    if (read_file(buffer, full_path, buffer_size) == -1) {
+        free(full_path);
+        full_path = NULL;
+        return -1;
+    }
+
+    buffer[buffer_size] = '\0';
+
+    free(full_path);
+    full_path = NULL;
+
+    return 0;
+}
+
 /**
  * @brief      Given the file path of a file with KEY=value pairs and a set of keywords,
  *             fill the corresponding fields in the structure with the associated values.

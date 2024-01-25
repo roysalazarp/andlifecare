@@ -18,7 +18,9 @@ char *request;
 char *url;
 int server_socket;
 int client_socket;
-    
+
+PGconn *conn;
+
 typedef struct {
     char DB_NAME[12];
     char DB_USER[16];
@@ -33,6 +35,7 @@ void sigint_handler(int signo) {
      */
     if (signo == SIGINT) {
         printf("\nReceived SIGINT, exiting...\n");
+        PQfinish(conn);
         close(server_socket);
         close(client_socket);
         free(url);
@@ -76,13 +79,11 @@ int main() {
     
     env_path[0] = '\0';
 
-    if (build_absolute_path(env_path, "/.env") == -1) {
+    if (build_absolute_path(env_path, "/.env.dev") == -1) {
         free(env_path);
         env_path = NULL;
         return -1;
     }
-
-    const char *keywords[] = { "dbname", "user", "password", "host", "port", NULL };
 
     ENV env;
 
@@ -96,14 +97,6 @@ int main() {
     free(env_path);
     env_path = NULL;
 
-    /*
-    printf("DB_NAME: %s\n", env.DB_NAME);
-    printf("DB_USER: %s\n", env.DB_USER);
-    printf("DB_PASSWORD: %s\n", env.DB_PASSWORD);
-    printf("DB_HOST: %s\n", env.DB_HOST);
-    printf("DB_PORT: %s\n", env.DB_PORT);
-    */
-
     const char *values[5];
     values[0] = env.DB_NAME;
     values[1] = env.DB_USER;
@@ -111,49 +104,28 @@ int main() {
     values[3] = env.DB_HOST;
     values[4] = env.DB_PORT;
 
-    PGconn *conn = PQconnectdbParams(keywords, values, 0);
+    const char *keywords[] = { "dbname", "user", "password", "host", "port", NULL };
+    conn = PQconnectdbParams(keywords, values, 0);
         
-    if (PQstatus(conn) == CONNECTION_OK) {
-        printf("Connection established successfully!\n");
-
-        /* Perform database operations or other tasks */
-        PGresult *result = PQexec(conn, "SELECT * FROM app.users");
-        
-        if (PQresultStatus(result) == PGRES_TUPLES_OK) {
-            int numRows = PQntuples(result);
-            int numCols = PQnfields(result);
-
-            printf("Query returned %d rows and %d columns:\n", numRows, numCols);
-
-            int i;
-            int j;
-            for (i = 0; i < numRows; ++i) {
-                for (j = 0; j < numCols; ++j) {
-                    printf("%s\t", PQgetvalue(result, i, j));
-                }
-                printf("\n");
-            }
-        } else {
-            fprintf(stderr, "Query execution failed: %s\n", PQerrorMessage(conn));
-        }
-
-        /* Close the connection when done */
-        PQfinish(conn);
-    } else {
-        fprintf(stderr, "Connection failed: %s\n", PQerrorMessage(conn));
+    if (PQstatus(conn) != CONNECTION_OK) {
+        log_error(PQerrorMessage(conn));
         exit(EXIT_FAILURE);
     }
+
+    printf("DB connection established successfully!\n");
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socket == -1) {
         log_error("Failed to create server socket\n");
+        PQfinish(conn);
         exit(EXIT_FAILURE);
     }
 
     int optname = 1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &optname, sizeof(int)) == -1) {
         log_error("Failed to set local address for immediately reuse upon socker closed\n");
+        PQfinish(conn);
         close(server_socket);
         exit(EXIT_FAILURE);
     }
@@ -166,12 +138,14 @@ int main() {
 
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
         log_error("Failed to bind socket to address and port\n");
+        PQfinish(conn);
         close(server_socket);
         exit(EXIT_FAILURE);
     }
 
     if (listen(server_socket, MAX_CONNECTIONS) == -1) {
         log_error("Failed to set up socket to listen for incoming connections\n");
+        PQfinish(conn);
         close(server_socket);
         exit(EXIT_FAILURE);
     }
@@ -185,6 +159,7 @@ int main() {
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
+            PQfinish(conn);
             close(server_socket);
             exit(EXIT_FAILURE);
         }
@@ -195,6 +170,7 @@ int main() {
         request = (char*)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
         if (request == NULL) {
             log_error("Failed to allocate memory for request\n");
+            PQfinish(conn);
             close(server_socket);
             close(client_socket);
             exit(EXIT_FAILURE);
@@ -204,6 +180,7 @@ int main() {
 
         if (recv(client_socket, request, REQUEST_BUFFER_SIZE, 0) == -1) {
             log_error("Failed extract headers from request\n");
+            PQfinish(conn);
             close(server_socket);
             close(client_socket);
             free(request);
@@ -230,6 +207,7 @@ int main() {
 
         if (url == NULL) {
             log_error("Failed to allocate memory for method, url or protocol\n");
+            PQfinish(conn);
             close(server_socket);
             close(client_socket);
             free(request);
@@ -249,6 +227,7 @@ int main() {
                                         "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);
@@ -265,6 +244,7 @@ int main() {
                                         "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);
@@ -279,6 +259,7 @@ int main() {
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
                 if (home_get(client_socket, request) == -1) {
+                    PQfinish(conn);
                     close(server_socket);
                     close(client_socket);
                     free(request);
@@ -290,6 +271,7 @@ int main() {
             }
         } else {
             if (not_found(client_socket, request) == -1) {
+                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);

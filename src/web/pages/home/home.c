@@ -9,6 +9,7 @@
 #include "utils/utils.h"
 #include "template_engine/template_engine.h"
 #include "globals.h"
+#include "core/core.h"
 
 int home_get(int client_socket, char *request) {
     char *template_path;
@@ -67,8 +68,28 @@ int home_get(int client_socket, char *request) {
 
     response[pre_rendering_response_length] = '\0';
 
+    User *user;
+    int numRows;
+
+    if (core_view_home(&user, &numRows) == -1) {
+        free(response);
+        response = NULL;
+        return -1;
+    }
+
+    int i;
+    for (i = 0; i < numRows; ++i) {
+        printf("User %d:\n", i + 1);
+        printf("ID: %s\n", user[i].id);
+        printf("Email: %s\n", user[i].email);
+        printf("First Name: %s\n", user[i].first_name);
+        printf("Last Name: %s\n", user[i].last_name);
+        printf("Country: %s\n", user[i].country);
+        printf("\n");
+    }
+
     char *country[] = { "v0", "Finland" };
-    if (te_single_substring_swap(country[0], country[1], &response) == -1) {
+    if (te_single_substring_swap("v0", "Finland", &response) == -1) {
         free(response);
         response = NULL;
         return -1;
