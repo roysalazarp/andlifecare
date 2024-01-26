@@ -68,49 +68,36 @@ int home_get(int client_socket, char *request) {
 
     response[pre_rendering_response_length] = '\0';
 
-    User *user;
-    int numRows;
+    User *users;
+    int num_rows;
+    int num_columns;
 
-    if (core_view_home(&user, &numRows) == -1) {
+    if (core_view_home(&users, &num_rows, &num_columns) == -1) {
         free(response);
         response = NULL;
         return -1;
     }
 
-    int i;
-    for (i = 0; i < numRows; ++i) {
-        printf("User %d:\n", i + 1);
-        printf("ID: %s\n", user[i].id);
-        printf("Email: %s\n", user[i].email);
-        printf("First Name: %s\n", user[i].first_name);
-        printf("Last Name: %s\n", user[i].last_name);
-        printf("Country: %s\n", user[i].country);
-        printf("\n");
-    }
-
-    char *country[] = { "v0", "Finland" };
-    if (te_single_substring_swap("v0", "Finland", &response) == -1) {
-        free(response);
-        response = NULL;
-        return -1;
-    }
-
-    char *phone_number[] = { "v1", "441317957" };
-    if (te_single_substring_swap(phone_number[0], phone_number[1], &response) == -1) {
-        free(response);
-        response = NULL;
-        return -1;
-    }
+    char ***users_list;
+    users_list = (char ***)malloc(num_rows * sizeof(char **));
     
-    char *phone_prefix[] = { "v2", "+358" };
-    if (te_single_substring_swap(phone_prefix[0], phone_prefix[1], &response) == -1) {
-        free(response);
-        response = NULL;
-        return -1;
+    int i;
+    for (i = 0; i < num_rows; ++i) {
+        users_list[i] = (char **)malloc((num_columns + 1) * sizeof(char *));
+        
+        users_list[i][0] = (char *)malloc((strlen(users[i].id) + 1) * sizeof(char));
+        users_list[i][1] = (char *)malloc((strlen(users[i].email) + 1) * sizeof(char));
+        users_list[i][2] = (char *)malloc((strlen(users[i].country) + 1) * sizeof(char));
+        users_list[i][3] = (char *)malloc((strlen(users[i].full_name) + 1) * sizeof(char));
+
+        strcpy(users_list[i][0], users[i].id);
+        strcpy(users_list[i][1], users[i].email);
+        strcpy(users_list[i][2], users[i].country);
+        strcpy(users_list[i][3], users[i].full_name);        
+        users_list[i][4] = NULL;
     }
 
-    char *menu_list[] = { "for0", "for0->v0", "home", "about", "contact", "careers", NULL };
-    if (te_multiple_substring_swap(menu_list[0], menu_list[1], menu_list + 2, &response) == -1) {
+    if (te_multiple_substring_swap("for0", (size_t)num_columns, users_list, &response, (size_t)num_rows) == -1) {
         free(response);
         response = NULL;
         return -1;
@@ -130,6 +117,21 @@ int home_get(int client_socket, char *request) {
 
     close(client_socket);
     return 0;
+}
+
+void free_users_list(int num_rows, int num_columns, char ***users_list) {
+    int i;
+    int j;
+    for (i = 0; i < num_rows; ++i) {
+        for (j = 0; i < num_columns; ++j) {
+            free(users_list[i][j]);
+            users_list[i][j] = NULL;
+        }
+        free(users_list[i]);
+        users_list[i] = NULL;
+    }
+
+    free(users_list);
 }
 
 void home_post(int client_socket, char *request) {}

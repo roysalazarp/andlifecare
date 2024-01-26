@@ -14,17 +14,14 @@
         <title>Document</title>
     </head>
     <body>
-        <div>
-            country: {{ v0 country }}
+        {{ for0 users }}
+        <div class="user">
+            <p>{{ for0->v0 user }}</p>
+            <p>{{ for0->v1 id }}</p>
+            <p>{{ for0->v2 email }}</p>
+            <p>{{ for0->v3 country }}</p>
         </div>
-        <div>
-            phone number: {{ v2 phone_prefix }} {{ v1 phone_number }}
-        </div>
-        <ul>
-            {{ for0 menu_list }}
-            <li>{{ for0->v0 menu_item }}</li>
-            {{ end for0 }}
-        </ul>
+        {{ end for0 }}
         <script defer src="src/web/pages/home/home.js"></script>
     </body>
 </html>

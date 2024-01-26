@@ -7,9 +7,9 @@
 #include "utils/utils.h"
 #include "core/core.h"
 
-int core_view_home(User **user, int *numRows) {
-    char query[168];
-    size_t query_length = 168;
+int core_view_home(User **users, int *num_rows, int *num_columns) {
+    char query[213];
+    size_t query_length = 213;
     if (file_content_to_string(query, query_length, "/src/core/views/home.sql") == -1) {
         return -1;
     }
@@ -21,26 +21,24 @@ int core_view_home(User **user, int *numRows) {
         return -1;
     }
     
-    *numRows = PQntuples(result);
+    *num_rows = PQntuples(result);
+    *num_columns = PQnfields(result);
 
-    *user = malloc(sizeof(User) * (*numRows));
+    *users = malloc(sizeof(User) * (*num_rows));
 
     int i;
-    for (i = 0; i < *numRows; ++i) {
-        strncpy((*user)[i].id, PQgetvalue(result, i, 0), sizeof((*user)[i].id)-1);
-        (*user)[i].id[sizeof((*user)[i].id)-1] = '\0';
+    for (i = 0; i < *num_rows; ++i) {
+        strncpy((*users)[i].id, PQgetvalue(result, i, 0), sizeof((*users)[i].id)-1);
+        (*users)[i].id[sizeof((*users)[i].id)-1] = '\0';
 
-        strncpy((*user)[i].email, PQgetvalue(result, i, 1), sizeof((*user)[i].email)-1);
-        (*user)[i].email[sizeof((*user)[i].email)-1] = '\0';
+        strncpy((*users)[i].email, PQgetvalue(result, i, 1), sizeof((*users)[i].email)-1);
+        (*users)[i].email[sizeof((*users)[i].email)-1] = '\0';
 
-        strncpy((*user)[i].first_name, PQgetvalue(result, i, 2), sizeof((*user)[i].first_name)-1);
-        (*user)[i].first_name[sizeof((*user)[i].first_name)-1] = '\0';
-
-        strncpy((*user)[i].last_name, PQgetvalue(result, i, 3), sizeof((*user)[i].last_name)-1);
-        (*user)[i].last_name[sizeof((*user)[i].last_name)-1] = '\0';
-
-        strncpy((*user)[i].country, PQgetvalue(result, i, 4), sizeof((*user)[i].country)-1);
-        (*user)[i].country[sizeof((*user)[i].country)-1] = '\0';
+        strncpy((*users)[i].country, PQgetvalue(result, i, 2), sizeof((*users)[i].country)-1);
+        (*users)[i].country[sizeof((*users)[i].country)-1] = '\0';
+        
+        strncpy((*users)[i].full_name, PQgetvalue(result, i, 3), sizeof((*users)[i].full_name)-1);
+        (*users)[i].full_name[sizeof((*users)[i].full_name)-1] = '\0';
     }
 
     PQclear(result);

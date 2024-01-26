@@ -159,7 +159,7 @@ int te_single_substring_swap(char *substring_to_remove, char *substring_to_add, 
     return 0;
 }
 
-int te_multiple_substring_swap(char *block_id, char *substring_to_remove, char **substrings_to_add, char **string) {    
+int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***substrings_to_add, char **string, size_t number_of_times) {
     char *keyword_address = te_substring_address_find(block_id, *string, 0, 1);
     unsigned int keyword_position_within_template = keyword_address - *string;
 
@@ -213,14 +213,7 @@ int te_multiple_substring_swap(char *block_id, char *substring_to_remove, char *
 
     for_template[length] = '\0';
 
-    size_t for_length = 0;
-    
-    size_t i;
-    for (i = 0; substrings_to_add[i] != NULL; i++) {
-        for_length++;
-    }
-
-    char** for_items = (char**)malloc(for_length * sizeof(char*));
+    char** for_items = (char**)malloc(number_of_times * sizeof(char*));
     if (for_items == NULL) {
         te_log_error("Failed to allocate memory for for_items\n");
         free(for_template);
@@ -228,11 +221,12 @@ int te_multiple_substring_swap(char *block_id, char *substring_to_remove, char *
         return -1;
     }
 
-    for (i = 0; i < for_length; i++) {
+    size_t i;
+    for (i = 0; i < number_of_times; i++) {
         for_items[i] = NULL;
     }
     
-    if (te_string_copy_into_all_buffers(for_template, for_items, for_length) == -1) {
+    if (te_string_copy_into_all_buffers(for_template, for_items, number_of_times) == -1) {
         te_log_error("Failed to make for_items\n");
         free(for_template);
         for_template = NULL;
@@ -241,23 +235,29 @@ int te_multiple_substring_swap(char *block_id, char *substring_to_remove, char *
 
     free(for_template);
     for_template = NULL;
+    
+    size_t j;
+    for (i = 0; i < number_of_times; ++i) {
+        for (j = 0; j < number_of_values; ++j) {
+            char substring_to_remove[10];
+            sprintf(substring_to_remove, "%s->v%lu", block_id, j);
 
-    for (i = 0; i < for_length; ++i) {
-        if (te_single_substring_swap(substring_to_remove, substrings_to_add[i], &for_items[i]) == -1) {
-            /* Clean up previously allocated memory */
-            size_t j;
-            for (j = 0; j < i; ++j) {
-                free(for_items[j]);
-                for_items[j] = NULL;
+            if (te_single_substring_swap(substring_to_remove, substrings_to_add[i][j], &for_items[i]) == -1) {
+                /* Clean up previously allocated memory */
+                size_t j;
+                for (j = 0; j < i; ++j) {
+                    free(for_items[j]);
+                    for_items[j] = NULL;
+                }
+                free(for_items);
+                for_items = NULL;
+                return -1;
             }
-            free(for_items);
-            for_items = NULL;
-            return -1;
         }
     }
 
     size_t total_length = 0;
-    for (i = 0; i < for_length; ++i) {
+    for (i = 0; i < number_of_times; ++i) {
         total_length += strlen(for_items[i]);
     }
 
@@ -270,13 +270,13 @@ int te_multiple_substring_swap(char *block_id, char *substring_to_remove, char *
 
     rendered_for[0] = '\0'; 
 
-    for (i = 0; i < for_length; ++i) {
+    for (i = 0; i < number_of_times; ++i) {
         /* TODO: Check for strcat errors */
         /* strcat will do its work before the null-terminator */
         strcat(rendered_for, for_items[i]);
     }
 
-    te_buffer_array_free(for_items, for_length);
+    te_buffer_array_free(for_items, number_of_times);
 
     if (te_substring_copy_into_string_at_memory_space(rendered_for, string, start_braces_address, e_end_braces_address + 2) == -1) {
         free(rendered_for);
