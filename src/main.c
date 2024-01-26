@@ -14,6 +14,7 @@
 #include "globals.h"
 
 volatile sig_atomic_t keep_running = 1;
+
 char *request;
 char *url;
 int server_socket;
@@ -35,13 +36,6 @@ void sigint_handler(int signo) {
      */
     if (signo == SIGINT) {
         printf("\nReceived SIGINT, exiting...\n");
-        PQfinish(conn);
-        close(server_socket);
-        close(client_socket);
-        free(url);
-        url = NULL;
-        free(request);
-        request = NULL;
         keep_running = 0;
     }
 }
@@ -97,16 +91,17 @@ int main() {
     free(env_path);
     env_path = NULL;
 
-    const char *values[5];
+    const char *values[6];
     values[0] = env.DB_NAME;
     values[1] = env.DB_USER;
     values[2] = env.DB_PASSWORD;
     values[3] = env.DB_HOST;
     values[4] = env.DB_PORT;
+    values[5] = NULL;
 
     const char *keywords[] = { "dbname", "user", "password", "host", "port", NULL };
     conn = PQconnectdbParams(keywords, values, 0);
-        
+
     if (PQstatus(conn) != CONNECTION_OK) {
         log_error(PQerrorMessage(conn));
         exit(EXIT_FAILURE);
@@ -125,8 +120,8 @@ int main() {
     int optname = 1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &optname, sizeof(int)) == -1) {
         log_error("Failed to set local address for immediately reuse upon socker closed\n");
-        PQfinish(conn);
         close(server_socket);
+        PQfinish(conn);
         exit(EXIT_FAILURE);
     }
 
@@ -138,29 +133,33 @@ int main() {
 
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
         log_error("Failed to bind socket to address and port\n");
-        PQfinish(conn);
         close(server_socket);
+        PQfinish(conn);
         exit(EXIT_FAILURE);
     }
 
     if (listen(server_socket, MAX_CONNECTIONS) == -1) {
         log_error("Failed to set up socket to listen for incoming connections\n");
-        PQfinish(conn);
         close(server_socket);
+        PQfinish(conn);
         exit(EXIT_FAILURE);
     }
 
     printf("Server listening on port: %d...\n", PORT);
     
-    while (keep_running) {        
+    while (keep_running) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof client_addr;
-
+        
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
+            if (keep_running == 0) {
+                break;
+            }
+            
             log_error("Failed to create client socket\n");
-            PQfinish(conn);
             close(server_socket);
+            PQfinish(conn);
             exit(EXIT_FAILURE);
         }
 
@@ -170,9 +169,9 @@ int main() {
         request = (char*)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
         if (request == NULL) {
             log_error("Failed to allocate memory for request\n");
-            PQfinish(conn);
             close(server_socket);
             close(client_socket);
+            PQfinish(conn);
             exit(EXIT_FAILURE);
         }
         
@@ -180,11 +179,11 @@ int main() {
 
         if (recv(client_socket, request, REQUEST_BUFFER_SIZE, 0) == -1) {
             log_error("Failed extract headers from request\n");
-            PQfinish(conn);
             close(server_socket);
             close(client_socket);
             free(request);
             request = NULL;
+            PQfinish(conn);
             exit(EXIT_FAILURE);
         }
 
@@ -207,11 +206,11 @@ int main() {
 
         if (url == NULL) {
             log_error("Failed to allocate memory for method, url or protocol\n");
-            PQfinish(conn);
             close(server_socket);
             close(client_socket);
             free(request);
             request = NULL;
+            PQfinish(conn);
             exit(EXIT_FAILURE);
         }
 
@@ -227,13 +226,13 @@ int main() {
                                         "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
-                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);
                 request = NULL;
                 free(url);
                 url = NULL;
+                PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
         }
@@ -244,13 +243,13 @@ int main() {
                                         "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
-                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);
                 request = NULL;
                 free(url);
                 url = NULL;
+                PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
         }
@@ -259,25 +258,25 @@ int main() {
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
                 if (home_get(client_socket, request) == -1) {
-                    PQfinish(conn);
                     close(server_socket);
                     close(client_socket);
                     free(request);
                     request = NULL;
                     free(url);
                     url = NULL;
+                    PQfinish(conn);
                     exit(EXIT_FAILURE);
                 }
             }
         } else {
             if (not_found(client_socket, request) == -1) {
-                PQfinish(conn);
                 close(server_socket);
                 close(client_socket);
                 free(request);
                 request = NULL;
                 free(url);
                 url = NULL;
+                PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
         }
@@ -286,8 +285,16 @@ int main() {
         url = NULL;
         free(request);
         request = NULL;
-
     }
+
+    close(server_socket);
+    close(client_socket);
+    free(url);
+    url = NULL;
+    free(request);
+    request = NULL;
+    PQfinish(conn);
+    printf("Server shut down!\n");
 
     return 0;
 }

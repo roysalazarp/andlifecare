@@ -11,6 +11,21 @@
 #include "globals.h"
 #include "core/core.h"
 
+void free_users_list(int num_rows, int num_columns, char ***users_list) {
+    int i;
+    int j;
+    for (i = 0; i < num_rows; ++i) {
+        for (j = 0; j < num_columns; ++j) {
+            free(users_list[i][j]);
+            users_list[i][j] = NULL;
+        }
+        free(users_list[i]);
+        users_list[i] = NULL;
+    }
+
+    free(users_list);
+}
+
 int home_get(int client_socket, char *request) {
     char *template_path;
     template_path = (char*)malloc(PATH_MAX * (sizeof *template_path) + 1);
@@ -80,15 +95,47 @@ int home_get(int client_socket, char *request) {
 
     char ***users_list;
     users_list = (char ***)malloc(num_rows * sizeof(char **));
+    if (users_list == NULL) {
+        log_error("Failed to allocate memory for users_list\n");
+        free(response);
+        response = NULL;
+        free(users);
+        users = NULL;
+        return -1;
+    }
     
     int i;
     for (i = 0; i < num_rows; ++i) {
         users_list[i] = (char **)malloc((num_columns + 1) * sizeof(char *));
+
+        if (users_list[i] == NULL) {
+            log_error("Failed to allocate memory for users_list[i]\n");
+            free_users_list(i, num_columns, users_list);
+            free(response);
+            response = NULL;
+            free(users);
+            users = NULL;
+            return -1;
+        }
         
         users_list[i][0] = (char *)malloc((strlen(users[i].id) + 1) * sizeof(char));
         users_list[i][1] = (char *)malloc((strlen(users[i].email) + 1) * sizeof(char));
         users_list[i][2] = (char *)malloc((strlen(users[i].country) + 1) * sizeof(char));
         users_list[i][3] = (char *)malloc((strlen(users[i].full_name) + 1) * sizeof(char));
+        
+        /**
+         * NOTE: This check for memory allocation failure probably doesn't work because 
+         *       free_users_list has no way to know which columns were allocated and which weren't.
+         */
+        if (users_list[i][0] == NULL || users_list[i][1] == NULL || users_list[i][2] == NULL || users_list[i][3] == NULL) {
+            log_error("Failed to allocate memory for users_list[i][j]\n");
+            free_users_list(i, num_columns, users_list);
+            free(response);
+            response = NULL;
+            free(users);
+            users = NULL;
+            return -1;
+        }
 
         strcpy(users_list[i][0], users[i].id);
         strcpy(users_list[i][1], users[i].email);
@@ -97,11 +144,17 @@ int home_get(int client_socket, char *request) {
         users_list[i][4] = NULL;
     }
 
+    free(users);
+    users = NULL;
+
     if (te_multiple_substring_swap("for0", (size_t)num_columns, users_list, &response, (size_t)num_rows) == -1) {
+        free_users_list(num_rows, num_columns, users_list);
         free(response);
         response = NULL;
         return -1;
     }
+
+    free_users_list(num_rows, num_columns, users_list);
 
     size_t post_rendering_response_length = strlen(response) * sizeof(char);
 
@@ -117,21 +170,6 @@ int home_get(int client_socket, char *request) {
 
     close(client_socket);
     return 0;
-}
-
-void free_users_list(int num_rows, int num_columns, char ***users_list) {
-    int i;
-    int j;
-    for (i = 0; i < num_rows; ++i) {
-        for (j = 0; i < num_columns; ++j) {
-            free(users_list[i][j]);
-            users_list[i][j] = NULL;
-        }
-        free(users_list[i]);
-        users_list[i] = NULL;
-    }
-
-    free(users_list);
 }
 
 void home_post(int client_socket, char *request) {}
