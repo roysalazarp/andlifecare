@@ -147,11 +147,31 @@ int file_content_to_string(char *buffer, size_t buffer_size, const char* path_fr
  * @return     0 if the values are successfully retrieved, -1 otherwise.
  */
 int load_values_from_file(void *structure, const char *path) {
-    FILE *file = fopen(path, "r");
-    if (file == NULL) {
-        log_error("Error opening file\n");
+    char *env_path;
+    env_path = (char*)malloc(PATH_MAX * (sizeof *env_path) + 1);
+    if (env_path == NULL) {
+        log_error("Failed to allocate memory for env_path\n");
         return -1;
     }
+    
+    env_path[0] = '\0';
+
+    if (build_absolute_path(env_path, path) == -1) {
+        free(env_path);
+        env_path = NULL;
+        return -1;
+    }
+
+    FILE *file = fopen(env_path, "r");
+    if (file == NULL) {
+        log_error("Error opening file\n");
+        free(env_path);
+        env_path = NULL;
+        return -1;
+    }
+
+    free(env_path);
+    env_path = NULL;
 
     char line[MAX_LINE_LENGTH];
     size_t structure_element_offset = 0;

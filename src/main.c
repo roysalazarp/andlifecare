@@ -13,6 +13,9 @@
 #include "web/request_handlers.h"
 #include "globals.h"
 
+#define PRINT_MESSAGE_COLOR "#0059ff"
+#define PRINT_MESSAGE_STATUS "#42ff62"
+
 volatile sig_atomic_t keep_running = 1;
 
 char *request;
@@ -30,122 +33,53 @@ typedef struct {
     char DB_PORT[5];
 } ENV;
 
-void sigint_handler(int signo) {
-    /**
-     * SIGINT (Ctrl+C) for graceful server exit, required by valgrind to report memory leaks.
-     */
-    if (signo == SIGINT) {
-        printf("\nReceived SIGINT, exiting...\n");
-        keep_running = 0;
-    }
-}
-
-/**
- * @return 0 if the file path has the specified extension, 1 otherwise.
- */
-unsigned int has_file_extension(const char *file_path, const char *extension) {
-    size_t extension_length = strlen(extension) + 1;
-    size_t path_length = strlen(file_path) + 1;
-    
-    if (extension_length > path_length) {
-        return 1;
-    }
-
-    if (strncmp(file_path + path_length - extension_length, extension, extension_length) == 0) {
-        return 0;
-    }
-    
-    return 1;
-}
+void sigint_handler(int signo);
+unsigned int has_file_extension(const char *file_path, const char *extension);
+int setup_server_socket(int *fd);
+void print_colored_message(const char *color, const char *format, ...);
+void print_banner();
 
 int main() {
+    print_banner();
+
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
         log_error("Failed to set up signal handler\n");
         exit(EXIT_FAILURE);
     }
 
-    char *env_path;
-    env_path = (char*)malloc(PATH_MAX * (sizeof *env_path) + 1);
-    if (env_path == NULL) {
-        log_error("Failed to allocate memory for env_path\n");
-        return -1;
-    }
-    
-    env_path[0] = '\0';
-
-    if (build_absolute_path(env_path, "/.env.dev") == -1) {
-        free(env_path);
-        env_path = NULL;
-        return -1;
-    }
-
     ENV env;
 
-    if (load_values_from_file(&env, env_path) == -1) {
-        free(env_path);
-        env_path = NULL;
+    if (load_values_from_file(&env, "/.env.dev") == -1) {
         log_error("Failed to load env variables from file\n");
         exit(EXIT_FAILURE);
     }
 
-    free(env_path);
-    env_path = NULL;
+    const char *db_connection_keywords[] = { "dbname", "user", "password", "host", "port", NULL };
+    const char *db_connection_values[6];
+    db_connection_values[0] = env.DB_NAME;
+    db_connection_values[1] = env.DB_USER;
+    db_connection_values[2] = env.DB_PASSWORD;
+    db_connection_values[3] = env.DB_HOST;
+    db_connection_values[4] = env.DB_PORT;
+    db_connection_values[5] = NULL;
 
-    const char *values[6];
-    values[0] = env.DB_NAME;
-    values[1] = env.DB_USER;
-    values[2] = env.DB_PASSWORD;
-    values[3] = env.DB_HOST;
-    values[4] = env.DB_PORT;
-    values[5] = NULL;
-
-    const char *keywords[] = { "dbname", "user", "password", "host", "port", NULL };
-    conn = PQconnectdbParams(keywords, values, 0);
+    conn = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
 
     if (PQstatus(conn) != CONNECTION_OK) {
         log_error(PQerrorMessage(conn));
         exit(EXIT_FAILURE);
     }
 
-    printf("DB connection established successfully!\n");
+    print_colored_message(PRINT_MESSAGE_COLOR, "DB connection established: ");
+    print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (server_socket == -1) {
-        log_error("Failed to create server socket\n");
+    if (setup_server_socket(&server_socket) == -1) {
         PQfinish(conn);
         exit(EXIT_FAILURE);
     }
 
-    int optname = 1;
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &optname, sizeof(int)) == -1) {
-        log_error("Failed to set local address for immediately reuse upon socker closed\n");
-        close(server_socket);
-        PQfinish(conn);
-        exit(EXIT_FAILURE);
-    }
-
-    struct sockaddr_in server_addr;
-    
-    server_addr.sin_family = AF_INET;              /* IPv4 */
-    server_addr.sin_port = htons(PORT);            /* Convert the port number from host byte order to network byte order (big-endian) */
-    server_addr.sin_addr.s_addr = INADDR_ANY;      /* Listen on all available network interfaces (IPv4 addresses) */
-
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
-        log_error("Failed to bind socket to address and port\n");
-        close(server_socket);
-        PQfinish(conn);
-        exit(EXIT_FAILURE);
-    }
-
-    if (listen(server_socket, MAX_CONNECTIONS) == -1) {
-        log_error("Failed to set up socket to listen for incoming connections\n");
-        close(server_socket);
-        PQfinish(conn);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Server listening on port: %d...\n", PORT);
+    print_colored_message(PRINT_MESSAGE_COLOR, "Server listening on port %d: ", PORT);
+    print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
     
     while (keep_running) {
         struct sockaddr_in client_addr;
@@ -297,4 +231,103 @@ int main() {
     printf("Server shut down!\n");
 
     return 0;
+}
+
+/**
+ * @return 0 if the file path has the specified extension, 1 otherwise.
+ */
+unsigned int has_file_extension(const char *file_path, const char *extension) {
+    size_t extension_length = strlen(extension) + 1;
+    size_t path_length = strlen(file_path) + 1;
+    
+    if (extension_length > path_length) {
+        return 1;
+    }
+
+    if (strncmp(file_path + path_length - extension_length, extension, extension_length) == 0) {
+        return 0;
+    }
+    
+    return 1;
+}
+
+void sigint_handler(int signo) {
+    /**
+     * SIGINT (Ctrl+C) for graceful server exit, required by valgrind to report memory leaks.
+     */
+    if (signo == SIGINT) {
+        printf("\nReceived SIGINT, exiting...\n");
+        keep_running = 0;
+    }
+}
+
+void print_colored_message(const char *color, const char *format, ...) {
+    /* Ensure the hex color starts with '#' and extract decimal values */
+    if (color[0] != '#' || strlen(color) != 7) {
+        printf("Invalid color format. Please use the format '#RRGGBB'.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    unsigned int r, g, b;
+    sscanf(color + 1, "%2x%2x%2x", &r, &g, &b);
+
+    /* Print message with specified color and formatting */
+    printf("\033[0;38;2;%d;%d;%dm", r, g, b);
+
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+
+    printf("\033[0m");
+}
+
+int setup_server_socket(int *fd) {
+    *fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (*fd == -1) {
+        log_error("Failed to create server *fd\n");
+        return -1;
+    }
+
+    int optname = 1;
+    if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &optname, sizeof(int)) == -1) {
+        log_error("Failed to set local address for immediately reuse upon socker closed\n");
+        close(*fd);
+        return -1;
+    }
+
+    struct sockaddr_in server_addr;
+    
+    server_addr.sin_family = AF_INET;              /* IPv4 */
+    server_addr.sin_port = htons(PORT);            /* Convert the port number from host byte order to network byte order (big-endian) */
+    server_addr.sin_addr.s_addr = INADDR_ANY;      /* Listen on all available network interfaces (IPv4 addresses) */
+
+    if (bind(*fd, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
+        log_error("Failed to bind *fd to address and port\n");
+        close(*fd);
+        return -1;
+    }
+
+    if (listen(*fd, MAX_CONNECTIONS) == -1) {
+        log_error("Failed to set up *fd to listen for incoming connections\n");
+        close(*fd);
+        return -1;
+    }
+    
+    return 0;
+}
+
+void print_banner() {
+    print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");
+    printf("\n");
+    print_colored_message("#ff5100", " █████╗ ███╗   ██╗██████╗ ██╗     ██╗███████╗███████╗ ██████╗ █████╗ ██████╗ ███████╗\n");
+    print_colored_message("#ff5100", "██╔══██╗████╗  ██║██╔══██╗██║     ██║██╔════╝██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝\n");
+    print_colored_message("#ff5100", "███████║██╔██╗ ██║██║  ██║██║     ██║█████╗  █████╗  ██║     ███████║██████╔╝█████╗  \n");
+    print_colored_message("#ff5100", "██╔══██║██║╚██╗██║██║  ██║██║     ██║██╔══╝  ██╔══╝  ██║     ██╔══██║██╔══██╗██╔══╝  \n");
+    print_colored_message("#ff5100", "██║  ██║██║ ╚████║██████╔╝███████╗██║██║     ███████╗╚██████╗██║  ██║██║  ██║███████╗\n");
+    print_colored_message("#ff5100", "╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝╚═╝     ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝\n");
+    print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");
+    print_colored_message("#ff5100", "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n");
+    printf("\n");
 }

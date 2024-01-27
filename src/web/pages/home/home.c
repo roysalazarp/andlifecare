@@ -11,20 +11,7 @@
 #include "globals.h"
 #include "core/core.h"
 
-void free_users_list(int num_rows, int num_columns, char ***users_list) {
-    int i;
-    int j;
-    for (i = 0; i < num_rows; ++i) {
-        for (j = 0; j < num_columns; ++j) {
-            free(users_list[i][j]);
-            users_list[i][j] = NULL;
-        }
-        free(users_list[i]);
-        users_list[i] = NULL;
-    }
-
-    free(users_list);
-}
+void free_users_list(int num_rows, int num_columns, char ***users_list);
 
 int home_get(int client_socket, char *request) {
     char *template_path;
@@ -175,3 +162,18 @@ int home_get(int client_socket, char *request) {
 void home_post(int client_socket, char *request) {}
 void home_put(int client_socket, char *request) {}
 void home_patch(int client_socket, char *request) {}
+
+void free_users_list(int num_rows, int num_columns, char ***users_list) {
+    int i;
+    int j;
+    for (i = 0; i < num_rows; ++i) {
+        for (j = 0; j < num_columns; ++j) {
+            free(users_list[i][j]);
+            users_list[i][j] = NULL;
+        }
+        free(users_list[i]);
+        users_list[i] = NULL;
+    }
+
+    free(users_list);
+}
