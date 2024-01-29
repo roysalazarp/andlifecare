@@ -18,11 +18,6 @@
 
 volatile sig_atomic_t keep_running = 1;
 
-char *request;
-char *url;
-int server_socket;
-int client_socket;
-
 PGconn *conn;
 
 typedef struct {
@@ -49,7 +44,7 @@ int main() {
 
     ENV env;
 
-    if (load_values_from_file(&env, "/.env.dev") == -1) {
+    if (load_values_from_file(&env, ".env.dev") == -1) {
         log_error("Failed to load env variables from file\n");
         exit(EXIT_FAILURE);
     }
@@ -73,6 +68,7 @@ int main() {
     print_colored_message(PRINT_MESSAGE_COLOR, "DB connection established: ");
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
+    int server_socket;
     if (setup_server_socket(&server_socket) == -1) {
         PQfinish(conn);
         exit(EXIT_FAILURE);
@@ -85,12 +81,9 @@ int main() {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof client_addr;
         
+        int client_socket;
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
-            if (keep_running == 0) {
-                break;
-            }
-            
             log_error("Failed to create client socket\n");
             close(server_socket);
             PQfinish(conn);
@@ -100,6 +93,7 @@ int main() {
         /** 
          * TODO: realloc when request buffer is not large enough
          */
+        char *request;
         request = (char*)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
         if (request == NULL) {
             log_error("Failed to allocate memory for request\n");
@@ -123,10 +117,15 @@ int main() {
 
         request[REQUEST_BUFFER_SIZE] = '\0';
 
-        const char *first_space = strchr(request, ' ');
-        const char *second_space = strchr(first_space + 1, ' ');
+        char *method_start_position = request;
+        char *method_end_position = strchr(request, ' ');
+        
+        /* Skip one space after the method and should be the beginning of the url */
+        char *url_start_position = method_end_position + 1; 
+        char *url_end_position = strchr(url_start_position, ' ');
 
-        size_t method_length = first_space - request;
+        size_t method_length = method_end_position - method_start_position;
+
         /**
          * HTTP method will never be longer than 7 characters
          */
@@ -135,9 +134,9 @@ int main() {
         /**
          * Request headers -> request line -> url will refer to src/web/pages (relatively short url) or pages partial updates (may be a long url)
          */
-        size_t url_length = second_space - (first_space + 1);
+        size_t url_length = url_end_position - url_start_position;
+        char *url;
         url = malloc(url_length * (sizeof *url) + 1);
-
         if (url == NULL) {
             log_error("Failed to allocate memory for method, url or protocol\n");
             close(server_socket);
@@ -151,7 +150,7 @@ int main() {
         strncpy(method, request, method_length);
         method[method_length] = '\0';
 
-        strncpy(url, first_space + 1, url_length);
+        strncpy(url, url_start_position, url_length);
         url[url_length] = '\0';
 
         if (has_file_extension(url, ".css") == 0 && strcmp(method, "GET") == 0) {
@@ -220,15 +219,6 @@ int main() {
         free(request);
         request = NULL;
     }
-
-    close(server_socket);
-    close(client_socket);
-    free(url);
-    url = NULL;
-    free(request);
-    request = NULL;
-    PQfinish(conn);
-    printf("Server shut down!\n");
 
     return 0;
 }

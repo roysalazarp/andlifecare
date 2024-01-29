@@ -74,8 +74,6 @@ int build_absolute_path(char *buffer, const char *path) {
     cwd = (char *)malloc(PATH_MAX * (sizeof *cwd));
     if (cwd == NULL) {
         log_error("Failed to allocate memory for cwd\n");
-        free(cwd);
-        cwd = NULL;
         return -1;
     }
 
@@ -86,15 +84,8 @@ int build_absolute_path(char *buffer, const char *path) {
         return -1;
     }
 
-    if (cwd == NULL) {
-        log_error("Failed to get the absolute path of the current working directory\n");
-        free(cwd);
-        cwd = NULL;
-        return -1;
-    }
-
     /* sprintf automatically appends null-terminator */
-    if (sprintf(buffer, "%s%s", cwd, path) < 0) {
+    if (sprintf(buffer, "%s/%s", cwd, path) < 0) {
         log_error("Formatted string truncated\n");
         free(cwd);
         cwd = NULL;
@@ -143,35 +134,35 @@ int file_content_to_string(char *buffer, size_t buffer_size, const char* path_fr
  *             If a line starts with a "#" ignore it, it is a comment.
  * 
  * @param[out] structure The structure to fill.
- * @param      path      The path to the file.
+ * @param      file_path The path to the file from project root.
  * @return     0 if the values are successfully retrieved, -1 otherwise.
  */
-int load_values_from_file(void *structure, const char *path) {
-    char *env_path;
-    env_path = (char*)malloc(PATH_MAX * (sizeof *env_path) + 1);
-    if (env_path == NULL) {
-        log_error("Failed to allocate memory for env_path\n");
+int load_values_from_file(void *structure, const char *file_path) {
+    /* NOTE: absolute_path maybe could be allocated in the stack */
+    char *absolute_path;
+    absolute_path = (char*)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
+    if (absolute_path == NULL) {
+        log_error("Failed to allocate memory for absolute_path\n");
         return -1;
     }
     
-    env_path[0] = '\0';
+    absolute_path[0] = '\0';
 
-    if (build_absolute_path(env_path, path) == -1) {
-        free(env_path);
-        env_path = NULL;
+    if (build_absolute_path(absolute_path, file_path) == -1) {
+        free(absolute_path);
+        absolute_path = NULL;
         return -1;
     }
 
-    FILE *file = fopen(env_path, "r");
+    FILE *file = fopen(absolute_path, "r");
+    
+    free(absolute_path);
+    absolute_path = NULL;
+    
     if (file == NULL) {
         log_error("Error opening file\n");
-        free(env_path);
-        env_path = NULL;
         return -1;
     }
-
-    free(env_path);
-    env_path = NULL;
 
     char line[MAX_LINE_LENGTH];
     size_t structure_element_offset = 0;
@@ -181,17 +172,17 @@ int load_values_from_file(void *structure, const char *path) {
     while (fgets(line, sizeof(line), file) != NULL) {
         char *hash_position = strchr(line, '#');
         if (hash_position != NULL) {
-            *hash_position = '\0'; /* Truncate the string at the position of the "#" */
+            *hash_position = '\0'; /* End line at "#" */
         }
 
-        const char *equal_sign = strchr(line, '=');
-        if (equal_sign == NULL) continue;
+        char *equal_sign = strchr(line, '=');
+        if (equal_sign == NULL) continue; /* No 'value' at this line */
         
         equal_sign++; /* Move past the '=' character */
 
         size_t value_char_position = 0;
 
-        /* Extract characters until a space, tab, null terminator, or newline is encountered */
+        /* Extract 'value' characters until a space, tab, null terminator, or newline is encountered */
         while (*equal_sign != '\0' && !isspace((unsigned char)*equal_sign)) {
             ((char *)structure)[structure_element_offset + value_char_position] = *equal_sign;
             value_char_position++;
@@ -204,7 +195,6 @@ int load_values_from_file(void *structure, const char *path) {
         read_count++;
     }
 
-    /* Clean up and return -1 if any keyword is not found */
     fclose(file);
     return 0;
 }

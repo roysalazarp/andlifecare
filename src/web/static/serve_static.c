@@ -18,6 +18,13 @@ int serve_static(int client_socket, char *path, const char *response_headers, si
 
     file_path[0] = '\0';
 
+    /**
+     * Remove the leading slash if the path is not the root path.
+     */
+    if (strcmp(path, "/") != 0) {
+        path++;
+    }
+    
     if (build_absolute_path(file_path, path) == -1) return -1;
 
     long file_size = calculate_file_size(file_path);

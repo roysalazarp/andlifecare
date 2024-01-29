@@ -23,7 +23,7 @@ int home_get(int client_socket, char *request) {
     
     template_path[0] = '\0';
 
-    if (build_absolute_path(template_path, "/src/web/pages/home/home.html") == -1) {
+    if (build_absolute_path(template_path, "src/web/pages/home/home.html") == -1) {
         free(template_path);
         template_path = NULL;
         return -1;

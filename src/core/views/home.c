@@ -10,7 +10,7 @@
 int core_view_home(User **users, int *num_rows, int *num_columns) {
     char query[213];
     size_t query_length = 213;
-    if (file_content_to_string(query, query_length, "/src/core/views/home.sql") == -1) {
+    if (file_content_to_string(query, query_length, "src/core/views/home.sql") == -1) {
         return -1;
     }
 
