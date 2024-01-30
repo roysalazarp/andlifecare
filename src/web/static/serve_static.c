@@ -1,16 +1,16 @@
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <linux/limits.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
-#include "utils/utils.h"
 #include "globals.h"
+#include "utils/utils.h"
 
 int serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
     char *file_path;
-    file_path = (char*)malloc(PATH_MAX * (sizeof *file_path) + 1);
+    file_path = (char *)malloc(PATH_MAX * (sizeof *file_path) + 1);
     if (file_path == NULL) {
         log_error("Failed to allocate memory for file_path\n");
         return -1;
@@ -24,8 +24,9 @@ int serve_static(int client_socket, char *path, const char *response_headers, si
     if (strcmp(path, "/") != 0) {
         path++;
     }
-    
-    if (build_absolute_path(file_path, path) == -1) return -1;
+
+    if (build_absolute_path(file_path, path) == -1)
+        return -1;
 
     long file_size = calculate_file_size(file_path);
     if (file_size == -1) {
@@ -36,7 +37,7 @@ int serve_static(int client_socket, char *path, const char *response_headers, si
 
     char *response;
     size_t response_length = ((size_t)(file_size)) + response_headers_length;
-    response = (char*)malloc(response_length * (sizeof *response) + 1);
+    response = (char *)malloc(response_length * (sizeof *response) + 1);
     if (response == NULL) {
         log_error("Failed to allocate memory for response\n");
         free(file_path);

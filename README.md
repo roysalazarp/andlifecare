@@ -22,8 +22,16 @@ The domain layers perform data validation, as well as the persistence or retriev
 
 Debian 12
 
-- Snap
-- NGINX
-- Certbot
-- PostgreSQL 16
-- libpq-dev
+-   Snap
+-   NGINX
+-   Certbot
+-   PostgreSQL 16
+-   libpq-dev
+-   argon2
+-   tailwind cli
+
+-   prettier
+-   clang
+-   clang-format
+
+~/tailwindcss -i src/web/static/globals.css -o src/web/static/styles.css --watch

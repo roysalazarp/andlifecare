@@ -1,17 +1,17 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <libpq-fe.h>
+#include <linux/limits.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <linux/limits.h>
-#include <libpq-fe.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
+#include "globals.h"
 #include "utils/utils.h"
 #include "web/request_handlers.h"
-#include "globals.h"
 
 #define PRINT_MESSAGE_COLOR "#0059ff"
 #define PRINT_MESSAGE_STATUS "#42ff62"
@@ -49,7 +49,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    const char *db_connection_keywords[] = { "dbname", "user", "password", "host", "port", NULL };
+    const char *db_connection_keywords[] = {"dbname", "user", "password", "host", "port", NULL};
     const char *db_connection_values[6];
     db_connection_values[0] = env.DB_NAME;
     db_connection_values[1] = env.DB_USER;
@@ -76,11 +76,11 @@ int main() {
 
     print_colored_message(PRINT_MESSAGE_COLOR, "Server listening on port %d: ", PORT);
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
-    
+
     while (keep_running) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof client_addr;
-        
+
         int client_socket;
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
@@ -90,11 +90,11 @@ int main() {
             exit(EXIT_FAILURE);
         }
 
-        /** 
+        /**
          * TODO: realloc when request buffer is not large enough
          */
         char *request;
-        request = (char*)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
+        request = (char *)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
         if (request == NULL) {
             log_error("Failed to allocate memory for request\n");
             close(server_socket);
@@ -102,7 +102,7 @@ int main() {
             PQfinish(conn);
             exit(EXIT_FAILURE);
         }
-        
+
         request[0] = '\0';
 
         if (recv(client_socket, request, REQUEST_BUFFER_SIZE, 0) == -1) {
@@ -119,9 +119,9 @@ int main() {
 
         char *method_start_position = request;
         char *method_end_position = strchr(request, ' ');
-        
+
         /* Skip one space after the method and should be the beginning of the url */
-        char *url_start_position = method_end_position + 1; 
+        char *url_start_position = method_end_position + 1;
         char *url_end_position = strchr(url_start_position, ' ');
 
         size_t method_length = method_end_position - method_start_position;
@@ -130,9 +130,10 @@ int main() {
          * HTTP method will never be longer than 7 characters
          */
         char method[8];
-        
+
         /**
-         * Request headers -> request line -> url will refer to src/web/pages (relatively short url) or pages partial updates (may be a long url)
+         * Request headers -> request line -> url will refer to src/web/pages (relatively short url)
+         * or pages partial updates (may be a long url)
          */
         size_t url_length = url_end_position - url_start_position;
         char *url;
@@ -153,10 +154,12 @@ int main() {
         strncpy(url, url_start_position, url_length);
         url[url_length] = '\0';
 
+        printf("%s\n", request);
+
         if (has_file_extension(url, ".css") == 0 && strcmp(method, "GET") == 0) {
-            char response_headers[] =   "HTTP/1.1 200 OK\r\n"
-                                        "Content-Type: text/css\r\n"
-                                        "\r\n";
+            char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                      "Content-Type: text/css\r\n"
+                                      "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
@@ -171,9 +174,9 @@ int main() {
         }
 
         if (has_file_extension(url, ".js") == 0 && strcmp(method, "GET") == 0) {
-            char response_headers[] =   "HTTP/1.1 200 OK\r\n"
-                                        "Content-Type: application/javascript\r\n"
-                                        "\r\n";
+            char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                      "Content-Type: application/javascript\r\n"
+                                      "\r\n";
 
             if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
@@ -186,7 +189,6 @@ int main() {
                 exit(EXIT_FAILURE);
             }
         }
-
 
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
@@ -229,7 +231,7 @@ int main() {
 unsigned int has_file_extension(const char *file_path, const char *extension) {
     size_t extension_length = strlen(extension) + 1;
     size_t path_length = strlen(file_path) + 1;
-    
+
     if (extension_length > path_length) {
         return 1;
     }
@@ -237,7 +239,7 @@ unsigned int has_file_extension(const char *file_path, const char *extension) {
     if (strncmp(file_path + path_length - extension_length, extension, extension_length) == 0) {
         return 0;
     }
-    
+
     return 1;
 }
 
@@ -288,10 +290,19 @@ int setup_server_socket(int *fd) {
     }
 
     struct sockaddr_in server_addr;
-    
-    server_addr.sin_family = AF_INET;              /* IPv4 */
-    server_addr.sin_port = htons(PORT);            /* Convert the port number from host byte order to network byte order (big-endian) */
-    server_addr.sin_addr.s_addr = INADDR_ANY;      /* Listen on all available network interfaces (IPv4 addresses) */
+
+    /* IPv4 */
+    server_addr.sin_family = AF_INET;
+
+    /**
+     * Convert the port number from host byte order to network byte order (big-endian)
+     */
+    server_addr.sin_port = htons(PORT);
+
+    /*
+     * Listen on all available network interfaces (IPv4 addresses)
+     */
+    server_addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(*fd, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
         log_error("Failed to bind *fd to address and port\n");
@@ -304,7 +315,7 @@ int setup_server_socket(int *fd) {
         close(*fd);
         return -1;
     }
-    
+
     return 0;
 }
 
