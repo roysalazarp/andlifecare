@@ -1,7 +1,8 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <ctype.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 void te_log_error(const char *message) {
     perror(message);
@@ -39,7 +40,7 @@ char *te_substring_address_find(const char *substring, const char *string, unsig
     for (i = start_from_position; i != end; i += step) {
         if (strncmp(string + i, substring, substring_length) == 0) {
             /* Found the substring, return its address */
-            return (char*)(string + i);
+            return (char *)(string + i);
         }
     }
 
@@ -75,7 +76,7 @@ int te_substring_copy_into_string_at_memory_space(const char *substring, char **
     strncpy(after, *string + end_index, remaining_string_length + 1);
     after[remaining_string_length] = '\0';
 
-    *string = (char*)realloc(*string, (begin_index + value_length + remaining_string_length + 1) * (sizeof **string));
+    *string = (char *)realloc(*string, (begin_index + value_length + remaining_string_length + 1) * (sizeof **string));
     if (*string == NULL) {
         te_log_error("Failed to re-allocate memory for new_string\n");
         return -1;
@@ -91,13 +92,12 @@ int te_substring_copy_into_string_at_memory_space(const char *substring, char **
     return 0;
 }
 
-
 /* Frees dest memory on failure */
-int te_string_copy_into_all_buffers(const char *string, char** buffer_array, size_t buffer_array_length) {
+int te_string_copy_into_all_buffers(const char *string, char **buffer_array, size_t buffer_array_length) {
     size_t i;
     for (i = 0; i < buffer_array_length; ++i) {
         size_t source_lenght = strlen(string);
-        buffer_array[i] = (char*)malloc(source_lenght * sizeof(char) + 1);
+        buffer_array[i] = (char *)malloc(source_lenght * sizeof(char) + 1);
 
         if (buffer_array[i] == NULL) {
             fprintf(stderr, "Failed to allocate memory for copy %lu\n", (unsigned long)i);
@@ -123,7 +123,7 @@ int te_string_copy_into_all_buffers(const char *string, char** buffer_array, siz
     return 0;
 }
 
-void te_buffer_array_free(char** buffer_array, size_t buffer_array_length) {
+void te_buffer_array_free(char **buffer_array, size_t buffer_array_length) {
     size_t i;
     for (i = 0; i < buffer_array_length; ++i) {
         free(buffer_array[i]);
@@ -139,64 +139,25 @@ int te_single_substring_swap(char *substring_to_remove, char *substring_to_add, 
     if (substring_to_remove_address == NULL) {
         return -1;
     }
-    
-    int substring_to_remove_position_within_string = substring_to_remove_address - *string;
-    
-    char *opening_braces_address = te_substring_address_find("{{", *string, substring_to_remove_position_within_string, -1);
-    if (opening_braces_address == NULL) {
-        return -1;
-    }
 
-    char *closing_braces_address = te_substring_address_find("}}", *string, substring_to_remove_position_within_string, 1);
-    if (closing_braces_address == NULL) {
-        return -1;
-    }
-    
-    if (te_substring_copy_into_string_at_memory_space(substring_to_add, string, opening_braces_address, closing_braces_address + 2) == -1) {
+    if (te_substring_copy_into_string_at_memory_space(substring_to_add, string, substring_to_remove_address, substring_to_remove_address + strlen(substring_to_remove)) == -1) {
         return -1;
     }
 
     return 0;
 }
 
-int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***substrings_to_add, char **string, size_t number_of_times) {
-    char *keyword_address = te_substring_address_find(block_id, *string, 0, 1);
-    unsigned int keyword_position_within_template = keyword_address - *string;
+int te_multiple_substring_swap(char *open_token, char *close_token, size_t number_of_values, char ***substrings_to_add, char **string, size_t number_of_times) {
+    char *open_token_address = te_substring_address_find(open_token, *string, 0, 1);
+    unsigned int codeblock_start_position = (open_token_address + strlen(open_token)) - *string;
 
-    char *start_braces_address = te_substring_address_find("{{", *string, keyword_position_within_template, -1);
-    char *end_braces_address = te_substring_address_find("}}", *string, keyword_position_within_template, 1);
+    char *close_token_address = te_substring_address_find(close_token, *string, codeblock_start_position, 1);
+    unsigned int codeblock_end_position = close_token_address - *string;
 
-    const char *prefix = "end ";
-    size_t end_keyword_length = strlen(prefix) + strlen(block_id);
-    char *end_keyword;
-    end_keyword = (char*)malloc(end_keyword_length * (sizeof *end_keyword) + 1);
-    if (end_keyword == NULL) {
-        te_log_error("Failed to allocate memory for end_keyword\n");
-        return -1;
-    }
-
-    end_keyword[0] = '\0';
-
-    if (sprintf(end_keyword, "%s%s", prefix, block_id) < 0) {
-        te_log_error("Failed to format string\n");
-        free(end_keyword);
-        end_keyword = NULL;
-        return -1;
-    }
-
-    char *end_keyword_address = te_substring_address_find(end_keyword, *string, keyword_position_within_template, 1);
-    free(end_keyword);
-    end_keyword = NULL;
-
-    unsigned int end_keyword_position_within_template = end_keyword_address - *string;
-
-    char *e_start_braces_address = te_substring_address_find("{{", *string, end_keyword_position_within_template, -1);
-    char *e_end_braces_address = te_substring_address_find("}}", *string, end_keyword_position_within_template, 1);
-
-    size_t length = e_start_braces_address - (end_braces_address + 2);
+    size_t length = codeblock_end_position - codeblock_start_position;
 
     char *for_template;
-    for_template = (char*)malloc(length * (sizeof *for_template) + 1);
+    for_template = (char *)malloc(length * (sizeof *for_template) + 1);
     if (for_template == NULL) {
         te_log_error("Failed to allocate memory for for_template\n");
         return -1;
@@ -204,7 +165,7 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
 
     for_template[0] = '\0';
 
-    if (strncpy(for_template, end_braces_address + 2, length) == NULL) {
+    if (strncpy(for_template, open_token_address + strlen(open_token), length) == NULL) {
         te_log_error("Failed copy string\n");
         free(for_template);
         for_template = NULL;
@@ -213,7 +174,7 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
 
     for_template[length] = '\0';
 
-    char** for_items = (char**)malloc(number_of_times * sizeof(char*));
+    char **for_items = (char **)malloc(number_of_times * sizeof(char *));
     if (for_items == NULL) {
         te_log_error("Failed to allocate memory for for_items\n");
         free(for_template);
@@ -225,7 +186,7 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
     for (i = 0; i < number_of_times; i++) {
         for_items[i] = NULL;
     }
-    
+
     if (te_string_copy_into_all_buffers(for_template, for_items, number_of_times) == -1) {
         te_log_error("Failed to make for_items\n");
         free(for_template);
@@ -235,12 +196,32 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
 
     free(for_template);
     for_template = NULL;
-    
+
     size_t j;
     for (i = 0; i < number_of_times; ++i) {
         for (j = 0; j < number_of_values; ++j) {
-            char substring_to_remove[10];
-            sprintf(substring_to_remove, "%s->v%lu", block_id, j);
+            char *keyword_start_position = strstr(open_token, "for");
+
+            unsigned int count = 0;
+            while ((*keyword_start_position + count) != '\0' && !isspace(((unsigned char)(*(keyword_start_position + count))))) {
+                count++;
+            }
+
+            char opening_brackets[] = "{{ ";
+            char closing_brackets[] = " }}";
+
+            char arrow[] = "->v";
+
+            char num_string[3]; /* number string probably wont be longer than 2 bytes + null-terminator ("99" -> is 3 bytes becuase it would have a null terminator) */
+            sprintf(num_string, "%lu", j);
+            size_t string_num_length = strlen(num_string);
+
+            char *substring_to_remove;
+            substring_to_remove = (char *)malloc(((strlen(opening_brackets) + string_num_length + strlen(arrow) + count + strlen(closing_brackets)) * (sizeof *substring_to_remove)) + 1);
+
+            strncpy(substring_to_remove, opening_brackets, strlen(opening_brackets));
+            strncpy(substring_to_remove + strlen(opening_brackets), keyword_start_position, count);
+            sprintf(substring_to_remove + strlen(opening_brackets) + count, "%s%s%s", arrow, num_string, closing_brackets);
 
             if (te_single_substring_swap(substring_to_remove, substrings_to_add[i][j], &for_items[i]) == -1) {
                 /* Clean up previously allocated memory */
@@ -262,13 +243,13 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
     }
 
     char *rendered_for;
-    rendered_for = (char*)malloc(total_length * (sizeof *rendered_for) + 1);
+    rendered_for = (char *)malloc(total_length * (sizeof *rendered_for) + 1);
     if (rendered_for == NULL) {
         te_log_error("Failed to allocate memory for rendered_for\n");
         return -1;
     }
 
-    rendered_for[0] = '\0'; 
+    rendered_for[0] = '\0';
 
     for (i = 0; i < number_of_times; ++i) {
         /* TODO: Check for strcat errors */
@@ -278,7 +259,7 @@ int te_multiple_substring_swap(char *block_id, size_t number_of_values, char ***
 
     te_buffer_array_free(for_items, number_of_times);
 
-    if (te_substring_copy_into_string_at_memory_space(rendered_for, string, start_braces_address, e_end_braces_address + 2) == -1) {
+    if (te_substring_copy_into_string_at_memory_space(rendered_for, string, open_token_address, close_token_address + strlen(close_token)) == -1) {
         free(rendered_for);
         rendered_for = NULL;
         return -1;

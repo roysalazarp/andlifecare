@@ -154,7 +154,11 @@ int main() {
         strncpy(url, url_start_position, url_length);
         url[url_length] = '\0';
 
-        printf("%s\n", request);
+        char *start_of_params = strchr(url, '?');
+
+        if (start_of_params != NULL) {
+            *start_of_params = '\0';
+        }
 
         if (has_file_extension(url, ".css") == 0 && strcmp(method, "GET") == 0) {
             char response_headers[] = "HTTP/1.1 200 OK\r\n"
@@ -320,6 +324,7 @@ int setup_server_socket(int *fd) {
 }
 
 void print_banner() {
+    /*
     print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");
     printf("\n");
     print_colored_message("#ff5100", " █████╗ ███╗   ██╗██████╗ ██╗     ██╗███████╗███████╗ ██████╗ █████╗ ██████╗ ███████╗\n");
@@ -330,5 +335,6 @@ void print_banner() {
     print_colored_message("#ff5100", "╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝╚═╝     ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝\n");
     print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");
     print_colored_message("#ff5100", "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░\n");
+    */
     printf("\n");
 }
