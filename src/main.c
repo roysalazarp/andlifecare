@@ -11,7 +11,7 @@
 
 #include "globals.h"
 #include "utils/utils.h"
-#include "web/request_handlers.h"
+#include "web/web.h"
 
 #define PRINT_MESSAGE_COLOR "#0059ff"
 #define PRINT_MESSAGE_STATUS "#42ff62"
@@ -165,7 +165,7 @@ int main() {
                                       "Content-Type: text/css\r\n"
                                       "\r\n";
 
-            if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+            if (web_serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
                 close(client_socket);
                 free(request);
@@ -182,7 +182,7 @@ int main() {
                                       "Content-Type: application/javascript\r\n"
                                       "\r\n";
 
-            if (serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+            if (web_serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
                 close(client_socket);
                 free(request);
@@ -196,7 +196,7 @@ int main() {
 
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
-                if (home_get(client_socket, request) == -1) {
+                if (web_page_home_get(client_socket, request) == -1) {
                     close(server_socket);
                     close(client_socket);
                     free(request);
@@ -208,7 +208,7 @@ int main() {
                 }
             }
         } else {
-            if (not_found(client_socket, request) == -1) {
+            if (web_page_not_found(client_socket, request) == -1) {
                 close(server_socket);
                 close(client_socket);
                 free(request);

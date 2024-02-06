@@ -8,7 +8,7 @@
 #include "globals.h"
 #include "utils/utils.h"
 
-int serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
+int web_serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
     char *file_path;
     file_path = (char *)malloc(PATH_MAX * (sizeof *file_path) + 1);
     if (file_path == NULL) {

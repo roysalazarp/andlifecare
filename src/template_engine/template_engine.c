@@ -217,11 +217,14 @@ int te_multiple_substring_swap(char *open_token, char *close_token, size_t numbe
             size_t string_num_length = strlen(num_string);
 
             char *substring_to_remove;
-            substring_to_remove = (char *)malloc(((strlen(opening_brackets) + string_num_length + strlen(arrow) + count + strlen(closing_brackets)) * (sizeof *substring_to_remove)) + 1);
+            size_t substring_to_remove_length = (strlen(opening_brackets) + string_num_length + strlen(arrow) + count + strlen(closing_brackets)) * (sizeof *substring_to_remove);
+            substring_to_remove = (char *)malloc(substring_to_remove_length + 1);
 
             strncpy(substring_to_remove, opening_brackets, strlen(opening_brackets));
             strncpy(substring_to_remove + strlen(opening_brackets), keyword_start_position, count);
+
             sprintf(substring_to_remove + strlen(opening_brackets) + count, "%s%s%s", arrow, num_string, closing_brackets);
+            /* No need to null-terminate after strncpy since sprintf does it */
 
             if (te_single_substring_swap(substring_to_remove, substrings_to_add[i][j], &for_items[i]) == -1) {
                 /* Clean up previously allocated memory */
@@ -234,6 +237,9 @@ int te_multiple_substring_swap(char *open_token, char *close_token, size_t numbe
                 for_items = NULL;
                 return -1;
             }
+
+            free(substring_to_remove);
+            substring_to_remove = NULL;
         }
     }
 
