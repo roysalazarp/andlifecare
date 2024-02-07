@@ -33,11 +33,11 @@ typedef struct {
 typedef struct {
     UsersData users_data;
     CountriesData countries_data;
-} HomeView;
+} UiTestView;
 
-int core_view_home(HomeView *home_view_data_buffer);
+int core_view_ui_test(UiTestView *ui_test_view_data_buffer);
 
-void core_utils_view_home_free(HomeView *home_view_data);
+void core_utils_view_ui_test_free(UiTestView *ui_test_view_data);
 void core_utils_print_query_result(PGresult *result);
 
 #endif

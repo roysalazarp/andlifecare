@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;800&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="src/web/static/globals.css" />
+        <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+        <title>UI Test</title>
+    </head>
+    <body>
+        <table>
+            <tr>
+                {{ for->users_table_column_names }}
+                <th>{{ for->users_table_column_names->v0 }}</th>
+                {{ end for->users_table_column_names }}
+            </tr>
+            {{ for->users_rows }}
+            <tr>
+                {{ for->user_row_values }}
+                <td>{{ for->user_row_values->v0 }}</td>
+                {{ end for->user_row_values }}
+            </tr>
+            {{ end for->users_rows }}
+        </table>
+        <div>
+            {{ for->countries_rows }} {{ for->country_values }}
+            <div>{{ for->country_values->v0 }}</div>
+            {{ end for->country_values }} {{ end for->countries_rows }}
+        </div>
+        <!-- <script defer src="src/web/pages/home/home.js"></script> -->
+    </body>
+</html>

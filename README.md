@@ -28,7 +28,6 @@ Debian 12
 -   PostgreSQL 16
 -   libpq-dev
 -   argon2
--   tailwind cli
 
 -   prettier
 -   clang

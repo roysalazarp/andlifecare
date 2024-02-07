@@ -39,7 +39,6 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
     }
 
     strncpy(*response_buffer, response_headers, response_headers_length);
-    /* No need to null-terminate after strncpy since read_file does it */
 
     if (read_file(*response_buffer + response_headers_length, absolute_path, file_size) == -1) {
         free(absolute_path);
@@ -51,6 +50,8 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
 
     free(absolute_path);
     absolute_path = NULL;
+
+    (*response_buffer)[pre_rendering_response_length] = '\0';
 
     return 0;
 }

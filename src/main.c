@@ -115,6 +115,15 @@ int main() {
             exit(EXIT_FAILURE);
         }
 
+        if (strlen(request) == (size_t)0) {
+            /**
+             * For some reason sometimes the browser sends an empty request.
+             * https://stackoverflow.com/questions/65386563/browser-sending-empty-request-to-own-server
+             */
+            printf("Received empty request\n");
+            continue;
+        }
+
         request[REQUEST_BUFFER_SIZE] = '\0';
 
         char *method_start_position = request;
@@ -197,6 +206,19 @@ int main() {
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
                 if (web_page_home_get(client_socket, request) == -1) {
+                    close(server_socket);
+                    close(client_socket);
+                    free(request);
+                    request = NULL;
+                    free(url);
+                    url = NULL;
+                    PQfinish(conn);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } else if (strcmp(url, "/ui-test") == 0) {
+            if (strcmp(method, "GET") == 0) {
+                if (web_page_ui_test_get(client_socket, request) == -1) {
                     close(server_socket);
                     close(client_socket);
                     free(request);

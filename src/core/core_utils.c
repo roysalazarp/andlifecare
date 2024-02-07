@@ -4,11 +4,11 @@
 
 #include "core/core.h"
 
-void core_utils_view_home_free(HomeView *home_view_data_buffer) {
-    free(home_view_data_buffer->users_data.users);
-    home_view_data_buffer->users_data.users = NULL;
-    free(home_view_data_buffer->countries_data.countries);
-    home_view_data_buffer->countries_data.countries = NULL;
+void core_utils_view_ui_test_free(UiTestView *ui_test_view_data_buffer) {
+    free(ui_test_view_data_buffer->users_data.users);
+    ui_test_view_data_buffer->users_data.users = NULL;
+    free(ui_test_view_data_buffer->countries_data.countries);
+    ui_test_view_data_buffer->countries_data.countries = NULL;
 }
 
 void core_utils_print_query_result(PGresult *result) {

@@ -1,12 +1,12 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include <ctype.h>
 #include <errno.h>
 #include <linux/limits.h>
 #include <stdarg.h>
-#include <unistd.h>
 #include <stddef.h>
-#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #define MAX_LINE_LENGTH 100
 
@@ -16,7 +16,7 @@ void log_error(const char *message) {
 }
 
 long calculate_file_size(char *absolute_file_path) {
-    FILE* file = fopen(absolute_file_path, "r");
+    FILE *file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
         log_error("Error opening file\n");
@@ -38,12 +38,12 @@ long calculate_file_size(char *absolute_file_path) {
 
     rewind(file);
     fclose(file);
-    
+
     return file_size;
 }
 
 int read_file(char *buffer, char *absolute_file_path, long file_size) {
-    FILE* file = fopen(absolute_file_path, "r");
+    FILE *file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
         log_error("Error opening file\n");
@@ -54,7 +54,7 @@ int read_file(char *buffer, char *absolute_file_path, long file_size) {
     if (bytes_read != (size_t)file_size) {
         if (feof(file)) {
             log_error("End of file reached before reading all elements\n");
-        } 
+        }
 
         if (ferror(file)) {
             perror("An error occurred during the fread operation");
@@ -98,41 +98,11 @@ int build_absolute_path(char *buffer, const char *path) {
     return 0;
 }
 
-int file_content_to_string(char *buffer, size_t buffer_size, const char* path_from_project_root) {
-    char *full_path;
-    full_path = (char*)malloc(PATH_MAX * (sizeof *full_path) + 1);
-    if (full_path == NULL) {
-        log_error("Failed to allocate memory for full_path\n");
-        return -1;
-    }
-    
-    full_path[0] = '\0';
-
-    if (build_absolute_path(full_path, path_from_project_root) == -1) {
-        free(full_path);
-        full_path = NULL;
-        return -1;
-    }
-
-    if (read_file(buffer, full_path, buffer_size) == -1) {
-        free(full_path);
-        full_path = NULL;
-        return -1;
-    }
-
-    buffer[buffer_size] = '\0';
-
-    free(full_path);
-    full_path = NULL;
-
-    return 0;
-}
-
 /**
  * @brief      Given the file path of a file with KEY=value pairs and a set of keywords,
  *             fill the corresponding fields in the structure with the associated values.
  *             If a line starts with a "#" ignore it, it is a comment.
- * 
+ *
  * @param[out] structure The structure to fill.
  * @param      file_path The path to the file from project root.
  * @return     0 if the values are successfully retrieved, -1 otherwise.
@@ -140,12 +110,12 @@ int file_content_to_string(char *buffer, size_t buffer_size, const char* path_fr
 int load_values_from_file(void *structure, const char *file_path) {
     /* NOTE: absolute_path maybe could be allocated in the stack */
     char *absolute_path;
-    absolute_path = (char*)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
+    absolute_path = (char *)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
     if (absolute_path == NULL) {
         log_error("Failed to allocate memory for absolute_path\n");
         return -1;
     }
-    
+
     absolute_path[0] = '\0';
 
     if (build_absolute_path(absolute_path, file_path) == -1) {
@@ -155,10 +125,10 @@ int load_values_from_file(void *structure, const char *file_path) {
     }
 
     FILE *file = fopen(absolute_path, "r");
-    
+
     free(absolute_path);
     absolute_path = NULL;
-    
+
     if (file == NULL) {
         log_error("Error opening file\n");
         return -1;
@@ -176,8 +146,9 @@ int load_values_from_file(void *structure, const char *file_path) {
         }
 
         char *equal_sign = strchr(line, '=');
-        if (equal_sign == NULL) continue; /* No 'value' at this line */
-        
+        if (equal_sign == NULL)
+            continue; /* No 'value' at this line */
+
         equal_sign++; /* Move past the '=' character */
 
         size_t value_char_position = 0;
@@ -188,7 +159,7 @@ int load_values_from_file(void *structure, const char *file_path) {
             value_char_position++;
             equal_sign++;
         }
-        
+
         ((char *)structure)[structure_element_offset + value_char_position] = '\0';
 
         structure_element_offset += value_char_position + 1;
@@ -202,12 +173,12 @@ int load_values_from_file(void *structure, const char *file_path) {
 /*
 size_t calculate_combined_strings_length(unsigned int num_strings, ...) {
     size_t error_value = 0;
-    
+
     if (num_strings <= 0) {
         log_error("Invalid number of strings\n");
         return error_value;
     }
-    
+
     size_t sum = 0;
 
     va_list args;
@@ -240,11 +211,11 @@ char *retrieve_header(const char *request, const char *key) {
         key_start++;
     }
 
-    char *value_end = strchr(key_start, '\n'); // Find the end of the value 
+    char *value_end = strchr(key_start, '\n'); // Find the end of the value
     if (value_end == NULL) return NULL;
 
     size_t value_length = value_end - key_start;
-    
+
     char *value;
     value = (char*)malloc(value_length * (sizeof *value) + 1);
     if (value == NULL) {

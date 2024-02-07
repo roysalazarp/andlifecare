@@ -8,7 +8,6 @@ long int calculate_file_size(char *file_path);
 int read_file(char *file_content, char *file_path, long file_size);
 int build_absolute_path(char *buffer, const char *path);
 int load_values_from_file(void *structure, const char *path);
-int file_content_to_string(char *buffer, size_t buffer_size, const char* path_from_project_root);
 
 /* size_t calculate_combined_strings_length(unsigned int num_strings, ...); */
 
