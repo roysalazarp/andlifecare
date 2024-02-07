@@ -203,6 +203,40 @@ int main() {
             }
         }
 
+        char *public_route = NULL;
+        if (requested_public_route(url) == 0) {
+
+            if (construct_public_route_file_path(&public_route, url) == -1) {
+                close(server_socket);
+                close(client_socket);
+                free(request);
+                request = NULL;
+                free(url);
+                url = NULL;
+                free(public_route);
+                public_route = NULL;
+                PQfinish(conn);
+                exit(EXIT_FAILURE);
+            }
+
+            char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                      "Content-Type: text/html\r\n"
+                                      "\r\n";
+
+            if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
+                close(server_socket);
+                close(client_socket);
+                free(request);
+                request = NULL;
+                free(url);
+                url = NULL;
+                free(public_route);
+                public_route = NULL;
+                PQfinish(conn);
+                exit(EXIT_FAILURE);
+            }
+        }
+
         if (strcmp(url, "/") == 0) {
             if (strcmp(method, "GET") == 0) {
                 if (web_page_home_get(client_socket, request) == -1) {
@@ -242,6 +276,8 @@ int main() {
             }
         }
 
+        free(public_route);
+        public_route = NULL;
         free(url);
         url = NULL;
         free(request);

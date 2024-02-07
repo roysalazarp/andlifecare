@@ -6,6 +6,8 @@ char ***web_utils_matrix_2d_allocation(char ***p, int d1, int d2);
 void web_utils_matrix_2d_free(char ***p, int d1, int d2);
 
 int web_serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length);
+int construct_public_route_file_path(char **path_buffer, char *url);
+unsigned int requested_public_route(char *url);
 
 int web_page_ui_test_get(int client_socket, char *request);
 

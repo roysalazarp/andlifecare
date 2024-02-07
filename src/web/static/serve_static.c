@@ -25,8 +25,9 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
         path++;
     }
 
-    if (build_absolute_path(file_path, path) == -1)
+    if (build_absolute_path(file_path, path) == -1) {
         return -1;
+    }
 
     long file_size = calculate_file_size(file_path);
     if (file_size == -1) {
@@ -77,4 +78,32 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
 
     close(client_socket);
     return 0;
+}
+
+int construct_public_route_file_path(char **path_buffer, char *url) {
+    char public_folder[] = "/src/web/pages/public";
+    char file_extension[] = ".html";
+
+    *path_buffer = (char *)malloc((strlen(public_folder) + strlen(url) + strlen(file_extension)) * (sizeof **path_buffer) + 1);
+    if (*path_buffer == NULL) {
+        log_error("Failed to allocate memory for *path_buffer\n");
+        return -1;
+    }
+
+    sprintf(*path_buffer, "%s%s%s", public_folder, url, file_extension);
+
+    return 0;
+}
+
+unsigned int requested_public_route(char *url) {
+    char *public_routes[] = {"/home", "/login", "/sign-up", "/about", NULL};
+
+    int i;
+    for (i = 0; public_routes[i] != NULL; i++) {
+        if (strcmp(url, public_routes[i]) == 0) {
+            return 0;
+        }
+    }
+
+    return 1;
 }

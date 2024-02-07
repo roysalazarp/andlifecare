@@ -27,7 +27,7 @@ int web_page_ui_test_get(int client_socket, char *request) {
                               "\r\n";
 
     char *response;
-    if (web_utils_construct_response(&response, "src/web/pages/ui_test/ui_test.html", response_headers) == -1) {
+    if (web_utils_construct_response(&response, "src/web/pages/ui_test/ui-test.html", response_headers) == -1) {
         free(response);
         response = NULL;
         return -1;
