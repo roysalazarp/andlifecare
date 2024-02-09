@@ -96,7 +96,7 @@ int construct_public_route_file_path(char **path_buffer, char *url) {
 }
 
 unsigned int requested_public_route(char *url) {
-    char *public_routes[] = {"/home", "/login", "/sign-up", "/about", NULL};
+    char *public_routes[] = {"/home", "/about", NULL};
 
     int i;
     for (i = 0; public_routes[i] != NULL; i++) {

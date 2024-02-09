@@ -1,9 +1,11 @@
+#include "utils/utils.h"
+#include <ctype.h>
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "utils/utils.h"
+#include "web/web.h"
 
 int web_utils_construct_response(char **response_buffer, const char *file_path, const char *response_headers) {
     char *absolute_path;
@@ -92,4 +94,128 @@ void web_utils_matrix_2d_free(char ***p, int d1, int d2) {
 
     free(p);
     p = NULL;
+}
+
+int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *http_request) {
+    parsed_http_request->method = NULL;
+    parsed_http_request->url = NULL;
+    parsed_http_request->query_params = NULL;
+    parsed_http_request->body = NULL;
+    parsed_http_request->http_version = NULL;
+    parsed_http_request->headers = NULL;
+
+    const char *method_end = strchr(http_request, ' ');
+    size_t method_len = method_end - http_request;
+    parsed_http_request->method = (char *)malloc(method_len + 1);
+    if (parsed_http_request->method == NULL) {
+        log_error("Failed to allocate memory for parsed_http_request->method\n");
+        return -1;
+    }
+    strncpy(parsed_http_request->method, http_request, method_len);
+    parsed_http_request->method[method_len] = '\0';
+
+    const char *url_start = method_end + 1;
+    const char *url_end = strchr(url_start, ' ');
+
+    const char *question_mark = url_start; /* we start assuming there isn't any query params */
+
+    int query_params_start = -1;
+    while (!isspace((unsigned char)*question_mark)) {
+        if (*question_mark == '?') {
+            query_params_start = question_mark - http_request;
+            break;
+        }
+
+        question_mark++;
+    }
+
+    size_t query_params_len = 0;
+    if (query_params_start >= 0) {
+
+        query_params_len = url_end - (question_mark + 1); /* skip question mark itself */
+        url_end = &http_request[query_params_start];
+    }
+
+    size_t url_len = url_end - url_start;
+
+    parsed_http_request->url = (char *)malloc(url_len + 1);
+    if (parsed_http_request->url == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to allocate memory for parsed_http_request->url\n");
+        return -1;
+    }
+    strncpy(parsed_http_request->url, url_start, url_len);
+    parsed_http_request->url[url_len] = '\0';
+
+    if (query_params_len > 0) {
+        parsed_http_request->query_params = (char *)malloc(query_params_len + 1);
+        if (parsed_http_request->query_params == NULL) {
+            web_utils_http_request_free(parsed_http_request);
+            log_error("Failed to allocate memory for parsed_http_request->query_params\n");
+            return -1;
+        }
+        strncpy(parsed_http_request->query_params, question_mark + 1, query_params_len); /* skip question mark itself */
+        parsed_http_request->query_params[query_params_len] = '\0';
+    }
+
+    char *http_version_start = strchr(question_mark, ' ');
+    http_version_start++; /* skip space itself */
+    char *http_version_end = strstr(http_version_start, "\r\n");
+    size_t http_version_len = http_version_end - http_version_start;
+    parsed_http_request->http_version = (char *)malloc(http_version_len + 1);
+    if (parsed_http_request->http_version == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to allocate memory for parsed_http_request->http_version\n");
+        return -1;
+    }
+    strncpy(parsed_http_request->http_version, http_version_start, http_version_len);
+    parsed_http_request->http_version[http_version_len] = '\0';
+
+    char *headers_start = http_version_end + 2; /* skip "\r\n" */
+    char *headers_end = strstr(headers_start, "\r\n\r\n");
+    size_t headers_len = headers_end - headers_start;
+    parsed_http_request->headers = (char *)malloc(headers_len + 1);
+    if (parsed_http_request->headers == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to allocate memory for parsed_http_request->headers\n");
+        return -1;
+    }
+    strncpy(parsed_http_request->headers, headers_start, headers_len);
+    parsed_http_request->headers[headers_len] = '\0';
+
+    char *body_start = headers_end + 4; /* skip "\r\n\r\n" */
+    char *body_end = strchr(body_start, '\0');
+    size_t body_len = body_end - body_start;
+    if (body_len > 0) {
+        parsed_http_request->body = (char *)malloc(body_len + 1);
+        if (parsed_http_request->body == NULL) {
+            web_utils_http_request_free(parsed_http_request);
+            log_error("Failed to allocate memory for parsed_http_request->body\n");
+            return -1;
+        }
+        strncpy(parsed_http_request->body, body_start, body_len);
+        parsed_http_request->body[body_len] = '\0';
+    }
+
+    return 0;
+}
+
+void web_utils_http_request_free(HttpRequest *parsed_http_request) {
+    free(parsed_http_request->method);
+    parsed_http_request->method = NULL;
+
+    free(parsed_http_request->url);
+    parsed_http_request->url = NULL;
+
+    free(parsed_http_request->query_params);
+    parsed_http_request->query_params = NULL;
+
+    free(parsed_http_request->body);
+    parsed_http_request->body = NULL;
+
+    free(parsed_http_request->http_version);
+    parsed_http_request->http_version = NULL;
+
+    free(parsed_http_request->headers);
+    parsed_http_request->headers = NULL;
 }

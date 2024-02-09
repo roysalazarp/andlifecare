@@ -2,7 +2,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-int web_page_not_found(int client_socket, char *request) {
+#include "web/web.h"
+
+int web_page_not_found(int client_socket, HttpRequest *request) {
     char response_headers[] = "HTTP/1.1 404 Not Found\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n"

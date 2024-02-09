@@ -12,7 +12,7 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
-int web_page_ui_test_get(int client_socket, char *request) {
+int web_page_ui_test_get(int client_socket, HttpRequest *request) {
     int i;
     int j;
     int k;

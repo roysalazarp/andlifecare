@@ -126,151 +126,108 @@ int main() {
 
         request[REQUEST_BUFFER_SIZE] = '\0';
 
-        char *method_start_position = request;
-        char *method_end_position = strchr(request, ' ');
+        HttpRequest parsed_http_request;
+        web_utils_parse_http_request(&parsed_http_request, request);
 
-        /* Skip one space after the method and should be the beginning of the url */
-        char *url_start_position = method_end_position + 1;
-        char *url_end_position = strchr(url_start_position, ' ');
+        free(request);
+        request = NULL;
 
-        size_t method_length = method_end_position - method_start_position;
-
-        /**
-         * HTTP method will never be longer than 7 characters
-         */
-        char method[8];
-
-        /**
-         * Request headers -> request line -> url will refer to src/web/pages (relatively short url)
-         * or pages partial updates (may be a long url)
-         */
-        size_t url_length = url_end_position - url_start_position;
-        char *url;
-        url = malloc(url_length * (sizeof *url) + 1);
-        if (url == NULL) {
-            log_error("Failed to allocate memory for method, url or protocol\n");
-            close(server_socket);
-            close(client_socket);
-            free(request);
-            request = NULL;
-            PQfinish(conn);
-            exit(EXIT_FAILURE);
-        }
-
-        strncpy(method, request, method_length);
-        method[method_length] = '\0';
-
-        strncpy(url, url_start_position, url_length);
-        url[url_length] = '\0';
-
-        char *start_of_params = strchr(url, '?');
-
-        if (start_of_params != NULL) {
-            *start_of_params = '\0';
-        }
-
-        if (has_file_extension(url, ".css") == 0 && strcmp(method, "GET") == 0) {
+        if (has_file_extension(parsed_http_request.url, ".css") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
             char response_headers[] = "HTTP/1.1 200 OK\r\n"
                                       "Content-Type: text/css\r\n"
                                       "\r\n";
 
-            if (web_serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+            if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
                 close(client_socket);
-                free(request);
-                request = NULL;
-                free(url);
-                url = NULL;
                 PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
         }
 
-        if (has_file_extension(url, ".js") == 0 && strcmp(method, "GET") == 0) {
+        if (has_file_extension(parsed_http_request.url, ".js") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
             char response_headers[] = "HTTP/1.1 200 OK\r\n"
                                       "Content-Type: application/javascript\r\n"
                                       "\r\n";
 
-            if (web_serve_static(client_socket, url, response_headers, strlen(response_headers)) == -1) {
+            if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
                 close(client_socket);
-                free(request);
-                request = NULL;
-                free(url);
-                url = NULL;
                 PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
         }
 
         char *public_route = NULL;
-        if (requested_public_route(url) == 0) {
-
-            if (construct_public_route_file_path(&public_route, url) == -1) {
-                close(server_socket);
-                close(client_socket);
-                free(request);
-                request = NULL;
-                free(url);
-                url = NULL;
-                free(public_route);
-                public_route = NULL;
-                PQfinish(conn);
-                exit(EXIT_FAILURE);
-            }
-
-            char response_headers[] = "HTTP/1.1 200 OK\r\n"
-                                      "Content-Type: text/html\r\n"
-                                      "\r\n";
-
-            if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
-                close(server_socket);
-                close(client_socket);
-                free(request);
-                request = NULL;
-                free(url);
-                url = NULL;
-                free(public_route);
-                public_route = NULL;
-                PQfinish(conn);
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        if (strcmp(url, "/") == 0) {
-            if (strcmp(method, "GET") == 0) {
-                if (web_page_home_get(client_socket, request) == -1) {
+        if (requested_public_route(parsed_http_request.url) == 0) {
+            if (strcmp(parsed_http_request.method, "GET") == 0) {
+                if (construct_public_route_file_path(&public_route, parsed_http_request.url) == -1) {
                     close(server_socket);
                     close(client_socket);
-                    free(request);
-                    request = NULL;
-                    free(url);
-                    url = NULL;
+                    free(public_route);
+                    public_route = NULL;
+                    PQfinish(conn);
+                    exit(EXIT_FAILURE);
+                }
+
+                char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                          "Content-Type: text/html\r\n"
+                                          "\r\n";
+
+                if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
+                    close(server_socket);
+                    close(client_socket);
+                    free(public_route);
+                    public_route = NULL;
                     PQfinish(conn);
                     exit(EXIT_FAILURE);
                 }
             }
-        } else if (strcmp(url, "/ui-test") == 0) {
-            if (strcmp(method, "GET") == 0) {
-                if (web_page_ui_test_get(client_socket, request) == -1) {
+        }
+
+        /**
+         * Routes start here
+         */
+        if (strcmp(parsed_http_request.url, "/") == 0) {
+            if (strcmp(parsed_http_request.method, "GET") == 0) {
+                if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
                     close(server_socket);
                     close(client_socket);
-                    free(request);
-                    request = NULL;
-                    free(url);
-                    url = NULL;
+                    PQfinish(conn);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
+            if (strcmp(parsed_http_request.method, "GET") == 0) {
+                if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
+                    close(server_socket);
+                    close(client_socket);
+                    PQfinish(conn);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
+            if (strcmp(parsed_http_request.method, "POST") == 0) {
+                if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
+                    close(server_socket);
+                    close(client_socket);
+                    PQfinish(conn);
+                    exit(EXIT_FAILURE);
+                }
+            }
+        } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
+            if (strcmp(parsed_http_request.method, "GET") == 0) {
+                if (web_page_ui_test_get(client_socket, &parsed_http_request) == -1) {
+                    close(server_socket);
+                    close(client_socket);
                     PQfinish(conn);
                     exit(EXIT_FAILURE);
                 }
             }
         } else {
-            if (web_page_not_found(client_socket, request) == -1) {
+            if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
                 close(server_socket);
                 close(client_socket);
-                free(request);
-                request = NULL;
-                free(url);
-                url = NULL;
                 PQfinish(conn);
                 exit(EXIT_FAILURE);
             }
@@ -278,10 +235,8 @@ int main() {
 
         free(public_route);
         public_route = NULL;
-        free(url);
-        url = NULL;
-        free(request);
-        request = NULL;
+
+        web_utils_http_request_free(&parsed_http_request);
     }
 
     return 0;

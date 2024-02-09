@@ -12,19 +12,13 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
-int web_page_home_get(int client_socket, HttpRequest *request) {
+int web_page_sign_up_get(int client_socket, HttpRequest *request) {
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n";
 
     char *response;
-    if (web_utils_construct_response(&response, "src/web/pages/home/home.html", response_headers) == -1) {
-        free(response);
-        response = NULL;
-        return -1;
-    }
-
-    if (te_single_substring_swap("{{ hello_world }}", "hello world", &response) == -1) {
+    if (web_utils_construct_response(&response, "src/web/pages/sign-up/sign-up.html", response_headers) == -1) {
         free(response);
         response = NULL;
         return -1;
@@ -43,5 +37,21 @@ int web_page_home_get(int client_socket, HttpRequest *request) {
     response = NULL;
 
     close(client_socket);
+    return 0;
+}
+
+int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
+    char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                              "Content-Type: text/html\r\n"
+                              "\r\n";
+
+    if (send(client_socket, response_headers, strlen(response_headers), 0) == -1) {
+        log_error("Failed send HTTP response\n");
+        return -1;
+    }
+
+    close(client_socket);
+    return 0;
+
     return 0;
 }
