@@ -219,3 +219,45 @@ void web_utils_http_request_free(HttpRequest *parsed_http_request) {
     free(parsed_http_request->headers);
     parsed_http_request->headers = NULL;
 }
+
+int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
+    char *key = string;
+
+    while (*key != '\0') {
+        char *key_end = strchr(key, '=');
+        size_t key_length = key_end - key;
+
+        char *value_start = key_end + 1;
+        char *value_end;
+        value_end = strchr(value_start, '&');
+        if (value_end == NULL) {
+            value_end = strchr(value_start, '\0');
+        }
+
+        size_t value_length = value_end - value_start;
+
+        if (strncmp(key, key_name, key_length) == 0) {
+            *buffer = malloc(value_length + 1);
+            if (*buffer == NULL) {
+                log_error("Failed to allocate memory for *buffer\n");
+                return -1;
+            }
+
+            strncpy(*buffer, value_start, value_length);
+            (*buffer)[value_length] = '\0';
+        }
+
+        if (*value_end == '\0') {
+            break;
+        }
+
+        key = value_end + 1;
+    }
+
+    if (*buffer == NULL) {
+        log_error("Value not found per key\n");
+        return -1;
+    }
+
+    return 0;
+}

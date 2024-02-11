@@ -45,6 +45,35 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
                               "Content-Type: text/html\r\n"
                               "\r\n";
 
+    char *email = NULL;
+    web_utils_parse_value(&email, "email", request->body);
+
+    char *password = NULL;
+    web_utils_parse_value(&password, "password", request->body);
+
+    char *repeat_password = NULL;
+    web_utils_parse_value(&repeat_password, "repeat_password", request->body);
+
+    char *remember = NULL;
+    web_utils_parse_value(&remember, "remember", request->body);
+
+    printf("%s\n", email);
+    printf("%s\n", password);
+    printf("%s\n", repeat_password);
+    printf("%s\n", remember);
+
+    free(email);
+    email = NULL;
+
+    free(password);
+    password = NULL;
+
+    free(repeat_password);
+    repeat_password = NULL;
+
+    free(remember);
+    remember = NULL;
+
     if (send(client_socket, response_headers, strlen(response_headers), 0) == -1) {
         log_error("Failed send HTTP response\n");
         return -1;

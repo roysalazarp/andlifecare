@@ -32,5 +32,3 @@ Debian 12
 -   prettier
 -   clang
 -   clang-format
-
-~/tailwindcss -i src/web/static/globals.css -o src/web/static/styles.css --watch
