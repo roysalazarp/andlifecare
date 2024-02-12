@@ -64,16 +64,16 @@ int te_substring_copy_into_string_at_memory_space(const char *substring, char **
     }
 
     size_t value_length = strlen(substring); /* we only want characters */
-    size_t remaining_string_length = strlen(*string + end_index);
+    size_t remaining_string_length = strlen(((*string) + end_index));
 
-    char *after;
-    after = malloc(remaining_string_length * (sizeof *after) + 1);
+    char *after = NULL;
+    after = malloc((remaining_string_length + 1) * (sizeof *after));
     if (after == NULL) {
         te_log_error("Failed to re-allocate memory for after\n");
         return -1;
     }
 
-    strncpy(after, *string + end_index, remaining_string_length + 1);
+    memcpy(after, *string + end_index, remaining_string_length + 1);
     after[remaining_string_length] = '\0';
 
     *string = (char *)realloc(*string, (begin_index + value_length + remaining_string_length + 1) * (sizeof **string));
@@ -82,9 +82,9 @@ int te_substring_copy_into_string_at_memory_space(const char *substring, char **
         return -1;
     }
 
-    /* TODO: Check for error in memmove and strncpy */
+    /* TODO: Check for error in memmove and memcpy */
     memmove(*string + begin_index + value_length, after, remaining_string_length + 1);
-    strncpy(*string + begin_index, substring, value_length);
+    memcpy(*string + begin_index, substring, value_length);
 
     free(after);
     after = NULL;
@@ -165,7 +165,7 @@ int te_multiple_substring_swap(char *open_token, char *close_token, size_t numbe
 
     for_template[0] = '\0';
 
-    if (strncpy(for_template, open_token_address + strlen(open_token), length) == NULL) {
+    if (memcpy(for_template, open_token_address + strlen(open_token), length) == NULL) {
         te_log_error("Failed copy string\n");
         free(for_template);
         for_template = NULL;
@@ -212,7 +212,7 @@ int te_multiple_substring_swap(char *open_token, char *close_token, size_t numbe
 
             char arrow[] = "->v";
 
-            char num_string[3]; /* number string probably wont be longer than 2 bytes + null-terminator ("99" -> is 3 bytes becuase it would have a null terminator) */
+            char num_string[21]; /* number string probably wont be longer than 2 bytes + null-terminator ("99" -> is 3 bytes becuase it would have a null terminator) */
             sprintf(num_string, "%lu", j);
             size_t string_num_length = strlen(num_string);
 
@@ -220,11 +220,11 @@ int te_multiple_substring_swap(char *open_token, char *close_token, size_t numbe
             size_t substring_to_remove_length = (strlen(opening_brackets) + string_num_length + strlen(arrow) + count + strlen(closing_brackets)) * (sizeof *substring_to_remove);
             substring_to_remove = (char *)malloc(substring_to_remove_length + 1);
 
-            strncpy(substring_to_remove, opening_brackets, strlen(opening_brackets));
-            strncpy(substring_to_remove + strlen(opening_brackets), keyword_start_position, count);
+            memcpy(substring_to_remove, opening_brackets, strlen(opening_brackets));
+            memcpy(substring_to_remove + strlen(opening_brackets), keyword_start_position, count);
 
             sprintf(substring_to_remove + strlen(opening_brackets) + count, "%s%s%s", arrow, num_string, closing_brackets);
-            /* No need to null-terminate after strncpy since sprintf does it */
+            /* No need to null-terminate after memcpy since sprintf does it */
 
             if (te_single_substring_swap(substring_to_remove, substrings_to_add[i][j], &for_items[i]) == -1) {
                 /* Clean up previously allocated memory */

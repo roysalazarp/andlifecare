@@ -83,29 +83,29 @@ int query_users(UiTestView *ui_test_view_data_buffer) {
         char *column_name = PQfname(users_result, i);
         size_t column_name_length = strlen(column_name);
 
-        strncpy(ui_test_view_data_buffer->users_data.columns[i], column_name, column_name_length);
+        memcpy(ui_test_view_data_buffer->users_data.columns[i], column_name, column_name_length);
         ui_test_view_data_buffer->users_data.columns[i][column_name_length] = '\0';
     }
 
     for (i = 0; i < ui_test_view_data_buffer->users_data.rows; ++i) {
         char *id = PQgetvalue(users_result, i, 0);
         size_t id_length = strlen(id);
-        strncpy(ui_test_view_data_buffer->users_data.users[i].id, id, id_length);
+        memcpy(ui_test_view_data_buffer->users_data.users[i].id, id, id_length);
         (ui_test_view_data_buffer->users_data.users)[i].id[id_length] = '\0';
 
         char *email = PQgetvalue(users_result, i, 1);
         size_t email_length = strlen(email);
-        strncpy(ui_test_view_data_buffer->users_data.users[i].email, email, email_length);
+        memcpy(ui_test_view_data_buffer->users_data.users[i].email, email, email_length);
         ui_test_view_data_buffer->users_data.users[i].email[email_length] = '\0';
 
         char *country = PQgetvalue(users_result, i, 2);
         size_t country_length = strlen(country);
-        strncpy(ui_test_view_data_buffer->users_data.users[i].country, country, country_length);
+        memcpy(ui_test_view_data_buffer->users_data.users[i].country, country, country_length);
         ui_test_view_data_buffer->users_data.users[i].country[country_length] = '\0';
 
         char *full_name = PQgetvalue(users_result, i, 3);
         size_t full_name_length = strlen(full_name);
-        strncpy(ui_test_view_data_buffer->users_data.users[i].full_name, full_name, full_name_length);
+        memcpy(ui_test_view_data_buffer->users_data.users[i].full_name, full_name, full_name_length);
         ui_test_view_data_buffer->users_data.users[i].full_name[full_name_length] = '\0';
     }
 
@@ -174,7 +174,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer) {
         char *column_name = PQfname(countries_result, i);
         size_t column_name_length = strlen(column_name);
 
-        strncpy(ui_test_view_data_buffer->countries_data.columns[i], column_name, column_name_length);
+        memcpy(ui_test_view_data_buffer->countries_data.columns[i], column_name, column_name_length);
         ui_test_view_data_buffer->countries_data.columns[i][column_name_length] = '\0';
     }
 
@@ -185,12 +185,12 @@ int query_countries(UiTestView *ui_test_view_data_buffer) {
 
         char *country_name = PQgetvalue(countries_result, i, 1);
         size_t country_name_length = strlen(country_name);
-        strncpy(ui_test_view_data_buffer->countries_data.countries[i].country_name, country_name, country_name_length);
+        memcpy(ui_test_view_data_buffer->countries_data.countries[i].country_name, country_name, country_name_length);
         ui_test_view_data_buffer->countries_data.countries[i].country_name[country_name_length] = '\0';
 
         char *iso3 = PQgetvalue(countries_result, i, 2);
         size_t iso3_length = strlen(iso3);
-        strncpy(ui_test_view_data_buffer->countries_data.countries[i].iso3, iso3, iso3_length);
+        memcpy(ui_test_view_data_buffer->countries_data.countries[i].iso3, iso3, iso3_length);
         ui_test_view_data_buffer->countries_data.countries[i].iso3[iso3_length] = '\0';
     }
 

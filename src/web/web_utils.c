@@ -40,7 +40,7 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
         return -1;
     }
 
-    strncpy(*response_buffer, response_headers, response_headers_length);
+    memcpy(*response_buffer, response_headers, response_headers_length);
 
     if (read_file(*response_buffer + response_headers_length, absolute_path, file_size) == -1) {
         free(absolute_path);
@@ -111,7 +111,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
         log_error("Failed to allocate memory for parsed_http_request->method\n");
         return -1;
     }
-    strncpy(parsed_http_request->method, http_request, method_len);
+    memcpy(parsed_http_request->method, http_request, method_len);
     parsed_http_request->method[method_len] = '\0';
 
     const char *url_start = method_end + 1;
@@ -144,7 +144,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
         log_error("Failed to allocate memory for parsed_http_request->url\n");
         return -1;
     }
-    strncpy(parsed_http_request->url, url_start, url_len);
+    memcpy(parsed_http_request->url, url_start, url_len);
     parsed_http_request->url[url_len] = '\0';
 
     if (query_params_len > 0) {
@@ -154,7 +154,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
             log_error("Failed to allocate memory for parsed_http_request->query_params\n");
             return -1;
         }
-        strncpy(parsed_http_request->query_params, question_mark + 1, query_params_len); /* skip question mark itself */
+        memcpy(parsed_http_request->query_params, question_mark + 1, query_params_len); /* skip question mark itself */
         parsed_http_request->query_params[query_params_len] = '\0';
     }
 
@@ -168,7 +168,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
         log_error("Failed to allocate memory for parsed_http_request->http_version\n");
         return -1;
     }
-    strncpy(parsed_http_request->http_version, http_version_start, http_version_len);
+    memcpy(parsed_http_request->http_version, http_version_start, http_version_len);
     parsed_http_request->http_version[http_version_len] = '\0';
 
     char *headers_start = http_version_end + 2; /* skip "\r\n" */
@@ -180,7 +180,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
         log_error("Failed to allocate memory for parsed_http_request->headers\n");
         return -1;
     }
-    strncpy(parsed_http_request->headers, headers_start, headers_len);
+    memcpy(parsed_http_request->headers, headers_start, headers_len);
     parsed_http_request->headers[headers_len] = '\0';
 
     char *body_start = headers_end + 4; /* skip "\r\n\r\n" */
@@ -193,7 +193,7 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
             log_error("Failed to allocate memory for parsed_http_request->body\n");
             return -1;
         }
-        strncpy(parsed_http_request->body, body_start, body_len);
+        memcpy(parsed_http_request->body, body_start, body_len);
         parsed_http_request->body[body_len] = '\0';
     }
 
@@ -243,7 +243,7 @@ int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
                 return -1;
             }
 
-            strncpy(*buffer, value_start, value_length);
+            memcpy(*buffer, value_start, value_length);
             (*buffer)[value_length] = '\0';
         }
 

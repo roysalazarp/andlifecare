@@ -63,7 +63,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request) {
     }
 
     for (i = 0; i < ui_test_view_data.users_data.rows; ++i) {
-        char ***user;
+        char ***user = NULL;
         int user_d1 = 4;
         int user_d2 = 1;
         user = web_utils_matrix_2d_allocation(user, user_d1, user_d2);
@@ -74,22 +74,22 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request) {
 
         size_t id_length = strlen(ui_test_view_data.users_data.users[i].id);
         user[0][0] = (char *)malloc(id_length * sizeof(char) + 1);
-        strncpy(user[0][0], ui_test_view_data.users_data.users[i].id, id_length);
+        memcpy(user[0][0], ui_test_view_data.users_data.users[i].id, id_length);
         user[0][0][id_length] = '\0';
 
         size_t full_name_length = strlen(ui_test_view_data.users_data.users[i].full_name);
         user[1][0] = (char *)malloc(full_name_length * sizeof(char) + 1);
-        strncpy(user[1][0], ui_test_view_data.users_data.users[i].full_name, full_name_length);
+        memcpy(user[1][0], ui_test_view_data.users_data.users[i].full_name, full_name_length);
         user[1][0][full_name_length] = '\0';
 
         size_t email_length = strlen(ui_test_view_data.users_data.users[i].email);
         user[2][0] = (char *)malloc(email_length * sizeof(char) + 1);
-        strncpy(user[2][0], ui_test_view_data.users_data.users[i].email, email_length);
+        memcpy(user[2][0], ui_test_view_data.users_data.users[i].email, email_length);
         user[2][0][email_length] = '\0';
 
         size_t country_length = strlen(ui_test_view_data.users_data.users[i].country);
         user[3][0] = (char *)malloc(country_length * sizeof(char) + 1);
-        strncpy(user[3][0], ui_test_view_data.users_data.users[i].country, country_length);
+        memcpy(user[3][0], ui_test_view_data.users_data.users[i].country, country_length);
         user[3][0][country_length] = '\0';
 
         if (te_multiple_substring_swap("{{ for->user_row_values }}", "{{ end for->user_row_values }}", 1, user, &response, 4) == -1) {
@@ -113,7 +113,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request) {
     }
 
     for (i = 0; i < ui_test_view_data.countries_data.rows; ++i) {
-        char ***country;
+        char ***country = NULL;
         int country_d1 = 1;
         int country_d2 = 1;
         country = web_utils_matrix_2d_allocation(country, country_d1, country_d2);
@@ -124,7 +124,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request) {
 
         size_t country_name_length = strlen(ui_test_view_data.countries_data.countries[i].country_name);
         country[0][0] = (char *)malloc(country_name_length * sizeof(char) + 1);
-        strncpy(country[0][0], ui_test_view_data.countries_data.countries[i].country_name, country_name_length);
+        memcpy(country[0][0], ui_test_view_data.countries_data.countries[i].country_name, country_name_length);
         country[0][0][country_name_length] = '\0';
 
         if (te_multiple_substring_swap("{{ for->country_values }}", "{{ end for->country_values }}", 1, country, &response, 1) == -1) {

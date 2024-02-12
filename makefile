@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable -pedantic -g
+CFLAGS = -std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable -pedantic -g -O3
 LDFLAGS = -I/usr/include/postgresql -lpq
 
 SRC_DIR = src

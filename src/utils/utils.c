@@ -225,7 +225,7 @@ char *retrieve_header(const char *request, const char *key) {
 
     value[0] = '\0';
 
-    strncpy(value, key_start, value_length);
+    memcpy(value, key_start, value_length);
 
     return value;
 }
