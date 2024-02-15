@@ -5,24 +5,32 @@
 
 #include "core/core.h"
 #include "globals.h"
+#include "queue.h"
 #include "utils/utils.h"
 
-int query_users(UiTestView *ui_test_view_data_buffer);
-int query_countries(UiTestView *ui_test_view_data_buffer);
+int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn);
+int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn);
 
-int core_view_ui_test(UiTestView *ui_test_view_data_buffer) {
-    if (query_users(ui_test_view_data_buffer) == -1) {
+int core_view_ui_test(UiTestView *ui_test_view_data_buffer, int client_socket, int conn_index) {
+    PGconn *conn = conn_pool[conn_index];
+
+    if (PQstatus(conn) != CONNECTION_OK) {
+        log_error(PQerrorMessage(conn));
+        exit(EXIT_FAILURE);
+    }
+
+    if (query_users(ui_test_view_data_buffer, conn) == -1) {
         return -1;
     }
 
-    if (query_countries(ui_test_view_data_buffer) == -1) {
+    if (query_countries(ui_test_view_data_buffer, conn) == -1) {
         return -1;
     }
 
     return 0;
 }
 
-int query_users(UiTestView *ui_test_view_data_buffer) {
+int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     char *query_absolute_path;
     query_absolute_path = (char *)malloc(PATH_MAX * (sizeof *query_absolute_path) + 1);
     if (query_absolute_path == NULL) {
@@ -114,7 +122,7 @@ int query_users(UiTestView *ui_test_view_data_buffer) {
     return 0;
 }
 
-int query_countries(UiTestView *ui_test_view_data_buffer) {
+int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     char *query_absolute_path;
     query_absolute_path = (char *)malloc(PATH_MAX * (sizeof *query_absolute_path) + 1);
     if (query_absolute_path == NULL) {

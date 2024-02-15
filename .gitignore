@@ -2,3 +2,4 @@
 .devcontainer
 .vscode
 build
+.env.prod

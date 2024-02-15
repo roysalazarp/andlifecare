@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <libpq-fe.h>
 #include <linux/limits.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <unistd.h>
 
 #include "globals.h"
+#include "queue.h"
 #include "utils/utils.h"
 #include "web/web.h"
 
@@ -18,7 +20,14 @@
 
 volatile sig_atomic_t keep_running = 1;
 
-PGconn *conn;
+int server_socket;
+
+PGconn *conn_pool[POOL_SIZE];
+pthread_t thread_pool[POOL_SIZE];
+pthread_key_t thread_index_key;
+int thread_indices[POOL_SIZE];
+pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
 
 typedef struct {
     char DB_NAME[12];
@@ -28,9 +37,13 @@ typedef struct {
     char DB_PORT[5];
 } ENV;
 
+ENV env;
+
 void sigint_handler(int signo);
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
+void *router(void *p_client_socket, int conn_index);
+void *threads_handler(void *arg);
 void print_colored_message(const char *color, const char *format, ...);
 void print_banner();
 
@@ -41,8 +54,6 @@ int main() {
         log_error("Failed to set up signal handler\n");
         exit(EXIT_FAILURE);
     }
-
-    ENV env;
 
     if (load_values_from_file(&env, ".env.dev") == -1) {
         log_error("Failed to load env variables from file\n");
@@ -58,19 +69,26 @@ int main() {
     db_connection_values[4] = env.DB_PORT;
     db_connection_values[5] = NULL;
 
-    conn = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
+    pthread_key_create(&thread_index_key, NULL);
 
-    if (PQstatus(conn) != CONNECTION_OK) {
-        log_error(PQerrorMessage(conn));
-        exit(EXIT_FAILURE);
+    /* Spin up threads and db connection pool */
+    int i;
+    for (i = 0; i < POOL_SIZE; i++) {
+        thread_indices[i] = i;
+        pthread_create(&thread_pool[i], NULL, threads_handler, &thread_indices[i]);
+        conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
+
+        if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
+            log_error(PQerrorMessage(conn_pool[i]));
+            exit(EXIT_FAILURE);
+        }
     }
 
     print_colored_message(PRINT_MESSAGE_COLOR, "DB connection established: ");
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
-    int server_socket;
     if (setup_server_socket(&server_socket) == -1) {
-        PQfinish(conn);
+        /* PQfinish(conn); */
         exit(EXIT_FAILURE);
     }
 
@@ -86,160 +104,195 @@ int main() {
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
             close(server_socket);
-            PQfinish(conn);
+            /* PQfinish(conn); */
             exit(EXIT_FAILURE);
         }
 
-        /**
-         * TODO: realloc when request buffer is not large enough
-         */
-        char *request;
-        request = (char *)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
-        if (request == NULL) {
-            log_error("Failed to allocate memory for request\n");
-            close(server_socket);
-            close(client_socket);
-            PQfinish(conn);
-            exit(EXIT_FAILURE);
-        }
+        int *p_client_socket = malloc(sizeof(int));
+        *p_client_socket = client_socket;
 
-        request[0] = '\0';
-
-        if (recv(client_socket, request, REQUEST_BUFFER_SIZE, 0) == -1) {
-            log_error("Failed extract headers from request\n");
-            close(server_socket);
-            close(client_socket);
-            free(request);
-            request = NULL;
-            PQfinish(conn);
-            exit(EXIT_FAILURE);
-        }
-
-        if (strlen(request) == (size_t)0) {
-            /**
-             * For some reason sometimes the browser sends an empty request.
-             * https://stackoverflow.com/questions/65386563/browser-sending-empty-request-to-own-server
-             */
-            printf("Received empty request\n");
-            continue;
-        }
-
-        request[REQUEST_BUFFER_SIZE] = '\0';
-
-        HttpRequest parsed_http_request;
-        web_utils_parse_http_request(&parsed_http_request, request);
-
-        free(request);
-        request = NULL;
-
-        if (has_file_extension(parsed_http_request.url, ".css") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
-            char response_headers[] = "HTTP/1.1 200 OK\r\n"
-                                      "Content-Type: text/css\r\n"
-                                      "\r\n";
-
-            if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
-                close(server_socket);
-                close(client_socket);
-                PQfinish(conn);
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        if (has_file_extension(parsed_http_request.url, ".js") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
-            char response_headers[] = "HTTP/1.1 200 OK\r\n"
-                                      "Content-Type: application/javascript\r\n"
-                                      "\r\n";
-
-            if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
-                close(server_socket);
-                close(client_socket);
-                PQfinish(conn);
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        char *public_route = NULL;
-        if (requested_public_route(parsed_http_request.url) == 0) {
-            if (strcmp(parsed_http_request.method, "GET") == 0) {
-                if (construct_public_route_file_path(&public_route, parsed_http_request.url) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    free(public_route);
-                    public_route = NULL;
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-
-                char response_headers[] = "HTTP/1.1 200 OK\r\n"
-                                          "Content-Type: text/html\r\n"
-                                          "\r\n";
-
-                if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    free(public_route);
-                    public_route = NULL;
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        }
-
-        /**
-         * Routes start here
-         */
-        if (strcmp(parsed_http_request.url, "/") == 0) {
-            if (strcmp(parsed_http_request.method, "GET") == 0) {
-                if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
-            if (strcmp(parsed_http_request.method, "GET") == 0) {
-                if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
-            if (strcmp(parsed_http_request.method, "POST") == 0) {
-                if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
-            if (strcmp(parsed_http_request.method, "GET") == 0) {
-                if (web_page_ui_test_get(client_socket, &parsed_http_request) == -1) {
-                    close(server_socket);
-                    close(client_socket);
-                    PQfinish(conn);
-                    exit(EXIT_FAILURE);
-                }
-            }
-        } else {
-            if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
-                close(server_socket);
-                close(client_socket);
-                PQfinish(conn);
-                exit(EXIT_FAILURE);
-            }
-        }
-
-        free(public_route);
-        public_route = NULL;
-
-        web_utils_http_request_free(&parsed_http_request);
+        pthread_mutex_lock(&thread_mutex);
+        enqueue(p_client_socket);
+        pthread_cond_signal(&thread_condition_var);
+        pthread_mutex_unlock(&thread_mutex);
     }
 
     return 0;
+}
+
+void *threads_handler(void *arg) {
+    int *thread_index = (int *)arg;
+    pthread_setspecific(thread_index_key, thread_index);
+
+    while (1) {
+        int *p_client_socket;
+        pthread_mutex_lock(&thread_mutex);
+
+        if ((p_client_socket = dequeue()) == NULL) {
+            pthread_cond_wait(&thread_condition_var, &thread_mutex);
+            p_client_socket = dequeue();
+        }
+
+        pthread_mutex_unlock(&thread_mutex);
+        if (p_client_socket != NULL) {
+            router(p_client_socket, *thread_index);
+        }
+    }
+}
+
+void *router(void *p_client_socket, int conn_index) {
+    int client_socket = *((int *)p_client_socket);
+    free(p_client_socket);
+    p_client_socket = NULL;
+
+    /**
+     * TODO: realloc when request buffer is not large enough
+     */
+    char *request;
+    request = (char *)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
+    if (request == NULL) {
+        log_error("Failed to allocate memory for request\n");
+        return NULL;
+    }
+
+    request[0] = '\0';
+
+    int bytes_received = recv(client_socket, request, REQUEST_BUFFER_SIZE, 0);
+
+    if (bytes_received == -1) {
+        log_error("Failed extract headers from request\n");
+        close(server_socket);
+        close(client_socket);
+        free(request);
+        request = NULL;
+        /* PQfinish(conn); */
+        return NULL;
+    }
+
+    if (strlen(request) == (size_t)0) {
+        /**
+         * For some reason sometimes the browser sends an empty request.
+         * https://stackoverflow.com/questions/65386563/browser-sending-empty-request-to-own-server
+         */
+        printf("Received empty request\n");
+        /* continue; */
+    }
+
+    request[REQUEST_BUFFER_SIZE] = '\0';
+
+    HttpRequest parsed_http_request;
+    web_utils_parse_http_request(&parsed_http_request, request);
+
+    free(request);
+    request = NULL;
+
+    if (has_file_extension(parsed_http_request.url, ".css") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
+        char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                  "Content-Type: text/css\r\n"
+                                  "\r\n";
+
+        if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
+            close(server_socket);
+            close(client_socket);
+            /* PQfinish(conn); */
+            return NULL;
+        }
+    }
+
+    if (has_file_extension(parsed_http_request.url, ".js") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
+        char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                  "Content-Type: application/javascript\r\n"
+                                  "\r\n";
+
+        if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
+            close(server_socket);
+            close(client_socket);
+            /* PQfinish(conn); */
+            return NULL;
+        }
+    }
+
+    char *public_route = NULL;
+    if (requested_public_route(parsed_http_request.url) == 0) {
+        if (strcmp(parsed_http_request.method, "GET") == 0) {
+            if (construct_public_route_file_path(&public_route, parsed_http_request.url) == -1) {
+                close(server_socket);
+                close(client_socket);
+                free(public_route);
+                public_route = NULL;
+                /* PQfinish(conn); */
+                return NULL;
+            }
+
+            char response_headers[] = "HTTP/1.1 200 OK\r\n"
+                                      "Content-Type: text/html\r\n"
+                                      "\r\n";
+
+            if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
+                close(server_socket);
+                close(client_socket);
+                free(public_route);
+                public_route = NULL;
+                /* PQfinish(conn); */
+                return NULL;
+            }
+        }
+    }
+
+    /**
+     * Routes start here
+     */
+    if (strcmp(parsed_http_request.url, "/") == 0) {
+        if (strcmp(parsed_http_request.method, "GET") == 0) {
+            if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
+                close(server_socket);
+                close(client_socket);
+                /* PQfinish(conn); */
+                return NULL;
+            }
+        }
+    } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
+        if (strcmp(parsed_http_request.method, "GET") == 0) {
+            if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
+                close(server_socket);
+                close(client_socket);
+                /* PQfinish(conn); */
+                return NULL;
+            }
+        }
+    } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
+        if (strcmp(parsed_http_request.method, "POST") == 0) {
+            if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
+                close(server_socket);
+                close(client_socket);
+                /* PQfinish(conn); */
+                return NULL;
+            }
+        }
+    } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
+        if (strcmp(parsed_http_request.method, "GET") == 0) {
+            if (web_page_ui_test_get(client_socket, &parsed_http_request, conn_index) == -1) {
+                close(server_socket);
+                close(client_socket);
+                /* PQfinish(conn); */
+                return NULL;
+            }
+        }
+    } else {
+        if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
+            close(server_socket);
+            close(client_socket);
+            /* PQfinish(conn); */
+            return NULL;
+        }
+    }
+
+    free(public_route);
+    public_route = NULL;
+
+    web_utils_http_request_free(&parsed_http_request);
+
+    return NULL;
 }
 
 /**

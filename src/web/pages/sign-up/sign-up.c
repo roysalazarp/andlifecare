@@ -45,6 +45,8 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
                               "Content-Type: text/html\r\n"
                               "\r\n";
 
+    web_utils_url_decode(&request->body);
+
     char *email = NULL;
     web_utils_parse_value(&email, "email", request->body);
 

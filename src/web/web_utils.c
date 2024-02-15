@@ -261,3 +261,41 @@ int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
 
     return 0;
 }
+
+char web_utils_hex_to_char(char c) {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+
+    return -1;
+}
+
+int web_utils_url_decode(char **string) {
+    char *out = *string;
+    size_t len = strlen(*string);
+
+    size_t i;
+    for (i = 0; i < len; i++) {
+        if ((*string)[i] == '%' && i + 2 < len && isxdigit((*string)[i + 1]) && isxdigit((*string)[i + 2])) {
+            char c = web_utils_hex_to_char((*string)[i + 1]) * 16 + web_utils_hex_to_char((*string)[i + 2]);
+            *out++ = c;
+            i += 2;
+        } else if ((*string)[i] == '+') {
+            *out++ = ' ';
+        } else {
+            *out++ = (*string)[i];
+        }
+    }
+
+    *out = '\0';
+
+    return 0;
+}

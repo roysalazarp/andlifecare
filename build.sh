@@ -2,7 +2,7 @@
 
 CC=gcc
 CFLAGS="-std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable -pedantic -g -O3"
-LDFLAGS="-I/usr/include/postgresql -lpq"
+LDFLAGS="-I/usr/include/postgresql -lpq -pthread"
 
 SRC_DIR="src"
 BUILD_DIR="build"

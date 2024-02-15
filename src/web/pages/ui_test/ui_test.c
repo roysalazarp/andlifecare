@@ -12,13 +12,13 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
-int web_page_ui_test_get(int client_socket, HttpRequest *request) {
+int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index) {
     int i;
     int j;
     int k;
 
     UiTestView ui_test_view_data;
-    if (core_view_ui_test(&ui_test_view_data) == -1) {
+    if (core_view_ui_test(&ui_test_view_data, client_socket, conn_index) == -1) {
         return -1;
     }
 

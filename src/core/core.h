@@ -35,7 +35,7 @@ typedef struct {
     CountriesData countries_data;
 } UiTestView;
 
-int core_view_ui_test(UiTestView *ui_test_view_data_buffer);
+int core_view_ui_test(UiTestView *ui_test_view_data_buffer, int client_socket, int conn_index);
 
 void core_utils_view_ui_test_free(UiTestView *ui_test_view_data);
 void core_utils_print_query_result(PGresult *result);
