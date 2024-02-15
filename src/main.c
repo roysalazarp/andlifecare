@@ -42,6 +42,7 @@ ENV env;
 void sigint_handler(int signo);
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
+int extract_request(char **buffer, int client_socket);
 void *router(void *p_client_socket, int conn_index);
 void *threads_handler(void *arg);
 void print_colored_message(const char *color, const char *format, ...);
@@ -140,45 +141,61 @@ void *threads_handler(void *arg) {
     }
 }
 
+int extract_request(char **buffer, int client_socket) {
+    size_t buffer_size = 1024;
+
+    *buffer = (char *)malloc((buffer_size * (sizeof **buffer)) + 1);
+    if (*buffer == NULL) {
+        log_error("Failed to allocate memory for *buffer\n");
+        return -1;
+    }
+
+    (*buffer)[0] = '\0';
+
+    size_t total_bytes_received = 0;
+    int bytes_received;
+    while ((bytes_received = recv(client_socket, (*buffer) + total_bytes_received, buffer_size - total_bytes_received, 0)) > 0) {
+        total_bytes_received += bytes_received;
+
+        if (total_bytes_received >= buffer_size) {
+            buffer_size *= 2;
+            (*buffer) = realloc((*buffer), buffer_size);
+            if ((*buffer) == NULL) {
+                perror("realloc");
+                log_error("Failed to reallocate memory for *buffer\n");
+                close(server_socket);
+                close(client_socket);
+                free(*buffer);
+                *buffer = NULL;
+                return -1;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (bytes_received == -1) {
+        log_error("Failed extract headers from *buffer\n");
+        close(server_socket);
+        close(client_socket);
+        free(*buffer);
+        *buffer = NULL;
+        /* PQfinish(conn); */
+        return -1;
+    }
+
+    (*buffer)[buffer_size] = '\0';
+
+    return 0;
+}
+
 void *router(void *p_client_socket, int conn_index) {
     int client_socket = *((int *)p_client_socket);
     free(p_client_socket);
     p_client_socket = NULL;
 
-    /**
-     * TODO: realloc when request buffer is not large enough
-     */
-    char *request;
-    request = (char *)malloc((REQUEST_BUFFER_SIZE * (sizeof *request)) + 1);
-    if (request == NULL) {
-        log_error("Failed to allocate memory for request\n");
-        return NULL;
-    }
-
-    request[0] = '\0';
-
-    int bytes_received = recv(client_socket, request, REQUEST_BUFFER_SIZE, 0);
-
-    if (bytes_received == -1) {
-        log_error("Failed extract headers from request\n");
-        close(server_socket);
-        close(client_socket);
-        free(request);
-        request = NULL;
-        /* PQfinish(conn); */
-        return NULL;
-    }
-
-    if (strlen(request) == (size_t)0) {
-        /**
-         * For some reason sometimes the browser sends an empty request.
-         * https://stackoverflow.com/questions/65386563/browser-sending-empty-request-to-own-server
-         */
-        printf("Received empty request\n");
-        /* continue; */
-    }
-
-    request[REQUEST_BUFFER_SIZE] = '\0';
+    char *request = NULL;
+    extract_request(&request, client_socket);
 
     HttpRequest parsed_http_request;
     web_utils_parse_http_request(&parsed_http_request, request);
