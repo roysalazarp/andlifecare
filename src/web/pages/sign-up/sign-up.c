@@ -1,3 +1,4 @@
+#include <argon2.h>
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -11,6 +12,13 @@
 #include "template_engine/template_engine.h"
 #include "utils/utils.h"
 #include "web/web.h"
+
+#define SALT_SIZE 16
+#define HASH_SIZE 64
+
+int verify_password(const char *password, const char *hash);
+int hash_password(const char *password, char *hash, size_t hash_len);
+void generate_salt(char *salt, size_t salt_size);
 
 int web_page_sign_up_get(int client_socket, HttpRequest *request) {
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
@@ -41,6 +49,14 @@ int web_page_sign_up_get(int client_socket, HttpRequest *request) {
 }
 
 int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
+    /**
+     * Probably at the beginning of this function create the headers for the response
+     * for all kind of scenarios: 200 Success, 400 Bad Request, ...
+     *
+     * This function may return html to swap in the response (maybe with an error message) or
+     * headers to redirect to the dashboard page if the signup was successful.
+     */
+
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n";
@@ -62,7 +78,30 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
     printf("%s\n", email);
     printf("%s\n", password);
     printf("%s\n", repeat_password);
+
+    /**
+     * we probably don't need remember to signup or ever
+     */
     printf("%s\n", remember);
+
+    char hashed_password[HASH_SIZE];
+    hash_password(password, hashed_password, sizeof(hashed_password));
+
+    printf("%s\n", password);
+    printf("%s\n", hashed_password);
+
+    /**
+     * store:
+     * - email
+     * - salt
+     * - hashed_password
+     */
+
+    /**
+     * Create valid session for user and attach it to response header
+     * Add redirect to dashboard page and since response headers already send a valid session
+     * the dashboard page will see that the user is logged in and return to the browser successfully
+     */
 
     free(email);
     email = NULL;
@@ -86,3 +125,43 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
 
     return 0;
 }
+
+void generate_salt(char *salt, size_t salt_size) {
+    FILE *dev_urandom = fopen("/dev/urandom", "rb");
+    if (dev_urandom == NULL) {
+        perror("Error opening /dev/urandom");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fread(salt, 1, salt_size, dev_urandom) != salt_size) {
+        perror("Error reading from /dev/urandom");
+        fclose(dev_urandom);
+        exit(EXIT_FAILURE);
+    }
+
+    fclose(dev_urandom);
+}
+
+int hash_password(const char *password, char *hashed_password_buffer, size_t hashed_password_buffer_length) {
+    char salt[SALT_SIZE];
+    unsigned short i;
+
+    for (i = 0; i < SALT_SIZE; i++) {
+        salt[i] = 0;
+    }
+
+    generate_salt(salt, SALT_SIZE);
+
+    unsigned int time_cost = 2;
+    unsigned int memory_cost = 65536;
+    unsigned int threads = 4;
+
+    if (argon2_hash(time_cost, memory_cost, threads, password, strlen(password), salt, SALT_SIZE, hashed_password_buffer, hashed_password_buffer_length, NULL, 0, Argon2_i, ARGON2_VERSION_NUMBER) != ARGON2_OK) {
+        log_error("Failed to hash password\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+int verify_password(const char *password, const char *hash) { return argon2_verify(hash, password, strlen(password), Argon2_i); }
