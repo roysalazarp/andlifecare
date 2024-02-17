@@ -4,9 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "web/web.h"
 
+/* Reviewed: Fri 17. Feb 2024 */
 int web_utils_construct_response(char **response_buffer, const char *file_path, const char *response_headers) {
     char *absolute_path;
     absolute_path = (char *)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
@@ -23,7 +25,7 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
         return -1;
     }
 
-    long file_size = calculate_file_size(absolute_path);
+    ssize_t file_size = calculate_file_size(absolute_path);
     if (file_size == -1) {
         free(absolute_path);
         absolute_path = NULL;
@@ -40,7 +42,14 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
         return -1;
     }
 
-    memcpy(*response_buffer, response_headers, response_headers_length);
+    if (memcpy(*response_buffer, response_headers, response_headers_length) == NULL) {
+        log_error("Failed to copy response headers into response\n");
+        free(absolute_path);
+        absolute_path = NULL;
+        free(*response_buffer);
+        *response_buffer = NULL;
+        return -1;
+    }
 
     if (read_file(*response_buffer + response_headers_length, absolute_path, file_size) == -1) {
         free(absolute_path);
@@ -96,6 +105,7 @@ void web_utils_matrix_2d_free(char ***p, int d1, int d2) {
     p = NULL;
 }
 
+/* Reviewed: Fri 17. Feb 2024 */
 int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *http_request) {
     parsed_http_request->method = NULL;
     parsed_http_request->url = NULL;
@@ -104,102 +114,191 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
     parsed_http_request->http_version = NULL;
     parsed_http_request->headers = NULL;
 
+    /**
+     * Extract http request method
+     */
     const char *method_end = strchr(http_request, ' ');
-    size_t method_len = method_end - http_request;
-    parsed_http_request->method = (char *)malloc(method_len + 1);
+    size_t method_length = method_end - http_request;
+    parsed_http_request->method = (char *)malloc(method_length * (sizeof parsed_http_request->method) + 1);
     if (parsed_http_request->method == NULL) {
         log_error("Failed to allocate memory for parsed_http_request->method\n");
         return -1;
     }
-    memcpy(parsed_http_request->method, http_request, method_len);
-    parsed_http_request->method[method_len] = '\0';
 
+    if (memcpy(parsed_http_request->method, http_request, method_length) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to copy method from http request into structure\n");
+        return -1;
+    }
+
+    parsed_http_request->method[method_length] = '\0';
+
+    /**
+     * Extract http request url and url query params
+     */
     const char *url_start = method_end + 1;
-    const char *url_end = strchr(url_start, ' ');
+    const char *url_end;
+    if ((url_end = strchr(url_start, ' ')) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to find char\n");
+        return -1;
+    }
 
-    const char *question_mark = url_start; /* we start assuming there isn't any query params */
+    const char *query_params_start = url_start;
 
-    int query_params_start = -1;
-    while (!isspace((unsigned char)*question_mark)) {
-        if (*question_mark == '?') {
-            query_params_start = question_mark - http_request;
+    int query_params_start_index = -1; /* we start assuming there isn't any query params */
+    /* iterate though a string until a whitespace if found */
+    while (!isspace((unsigned char)*query_params_start)) {
+        /* if a '?' char is found along the way, that is the start of the query params */
+        if (*query_params_start == '?') {
+            query_params_start_index = query_params_start - http_request;
             break;
         }
 
-        question_mark++;
+        /* keep moving forward along the string */
+        query_params_start++;
     }
 
-    size_t query_params_len = 0;
-    if (query_params_start >= 0) {
-
-        query_params_len = url_end - (question_mark + 1); /* skip question mark itself */
-        url_end = &http_request[query_params_start];
+    size_t query_params_length = 0;
+    if (query_params_start_index >= 0) {
+        query_params_length = url_end - (query_params_start + 1); /* skip '?' char at the beginning of query params */
+        /**
+         * because we separate the 'http request url' and 'http request url query params', we set the end of the 'http request url'
+         * to where the 'http request url query params' start.
+         */
+        url_end = &http_request[query_params_start_index];
     }
 
     size_t url_len = url_end - url_start;
 
-    parsed_http_request->url = (char *)malloc(url_len + 1);
+    parsed_http_request->url = (char *)malloc(url_len * (sizeof parsed_http_request->url) + 1);
     if (parsed_http_request->url == NULL) {
         web_utils_http_request_free(parsed_http_request);
         log_error("Failed to allocate memory for parsed_http_request->url\n");
         return -1;
     }
-    memcpy(parsed_http_request->url, url_start, url_len);
+
+    if (memcpy(parsed_http_request->url, url_start, url_len) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to copy url from http request into structure\n");
+        return -1;
+    }
+
     parsed_http_request->url[url_len] = '\0';
 
-    if (query_params_len > 0) {
-        parsed_http_request->query_params = (char *)malloc(query_params_len + 1);
+    if (query_params_length > 0) {
+        parsed_http_request->query_params = (char *)malloc(query_params_length * (sizeof parsed_http_request->query_params) + 1);
         if (parsed_http_request->query_params == NULL) {
             web_utils_http_request_free(parsed_http_request);
             log_error("Failed to allocate memory for parsed_http_request->query_params\n");
             return -1;
         }
-        memcpy(parsed_http_request->query_params, question_mark + 1, query_params_len); /* skip question mark itself */
-        parsed_http_request->query_params[query_params_len] = '\0';
+
+        /* (query_params_start + 1) -> skip '?' char at the beginning of query params */
+        if (memcpy(parsed_http_request->query_params, (query_params_start + 1), query_params_length) == NULL) {
+            web_utils_http_request_free(parsed_http_request);
+            log_error("Failed to copy url query params from http request into structure\n");
+            return -1;
+        }
+
+        parsed_http_request->query_params[query_params_length] = '\0';
     }
 
-    char *http_version_start = strchr(question_mark, ' ');
-    http_version_start++; /* skip space itself */
-    char *http_version_end = strstr(http_version_start, "\r\n");
+    /**
+     * Extract http version from request
+     */
+    char *http_version_start;
+    if ((http_version_start = strchr(query_params_start, ' ')) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to find char\n");
+        return -1;
+    }
+
+    http_version_start++; /* skip space */
+
+    char *http_version_end;
+    if ((http_version_end = strstr(http_version_start, "\r\n")) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to find string\n");
+        return -1;
+    }
+
     size_t http_version_len = http_version_end - http_version_start;
-    parsed_http_request->http_version = (char *)malloc(http_version_len + 1);
+    parsed_http_request->http_version = (char *)malloc(http_version_len * (sizeof parsed_http_request->http_version) + 1);
     if (parsed_http_request->http_version == NULL) {
         web_utils_http_request_free(parsed_http_request);
         log_error("Failed to allocate memory for parsed_http_request->http_version\n");
         return -1;
     }
-    memcpy(parsed_http_request->http_version, http_version_start, http_version_len);
+
+    if (memcpy(parsed_http_request->http_version, http_version_start, http_version_len) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to copy http version from http request into structure\n");
+        return -1;
+    }
+
     parsed_http_request->http_version[http_version_len] = '\0';
 
+    /**
+     * Extract http request headers
+     */
     char *headers_start = http_version_end + 2; /* skip "\r\n" */
-    char *headers_end = strstr(headers_start, "\r\n\r\n");
+    char *headers_end;
+    if ((headers_end = strstr(headers_start, "\r\n\r\n")) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to find string\n");
+        return -1;
+    }
+
     size_t headers_len = headers_end - headers_start;
-    parsed_http_request->headers = (char *)malloc(headers_len + 1);
+    parsed_http_request->headers = (char *)malloc(headers_len * (sizeof parsed_http_request->headers) + 1);
     if (parsed_http_request->headers == NULL) {
         web_utils_http_request_free(parsed_http_request);
         log_error("Failed to allocate memory for parsed_http_request->headers\n");
         return -1;
     }
-    memcpy(parsed_http_request->headers, headers_start, headers_len);
+
+    if (memcpy(parsed_http_request->headers, headers_start, headers_len) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to copy headers from http request into structure\n");
+        return -1;
+    }
+
     parsed_http_request->headers[headers_len] = '\0';
 
+    /**
+     * Extract http request body
+     */
     char *body_start = headers_end + 4; /* skip "\r\n\r\n" */
-    char *body_end = strchr(body_start, '\0');
-    size_t body_len = body_end - body_start;
-    if (body_len > 0) {
-        parsed_http_request->body = (char *)malloc(body_len + 1);
+    char *body_end;
+    if ((body_end = strchr(body_start, '\0')) == NULL) {
+        web_utils_http_request_free(parsed_http_request);
+        log_error("Failed to find char\n");
+        return -1;
+    }
+
+    size_t body_length = body_end - body_start;
+    if (body_length > 0) {
+        parsed_http_request->body = (char *)malloc(body_length * (sizeof parsed_http_request->body) + 1);
         if (parsed_http_request->body == NULL) {
             web_utils_http_request_free(parsed_http_request);
             log_error("Failed to allocate memory for parsed_http_request->body\n");
             return -1;
         }
-        memcpy(parsed_http_request->body, body_start, body_len);
-        parsed_http_request->body[body_len] = '\0';
+
+        if (memcpy(parsed_http_request->body, body_start, body_length) == NULL) {
+            web_utils_http_request_free(parsed_http_request);
+            log_error("Failed to copy request body from http request into structure\n");
+            return -1;
+        }
+
+        parsed_http_request->body[body_length] = '\0';
     }
 
     return 0;
 }
 
+/* Reviewed: Fri 17. Feb 2024 */
 void web_utils_http_request_free(HttpRequest *parsed_http_request) {
     free(parsed_http_request->method);
     parsed_http_request->method = NULL;

@@ -15,6 +15,9 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
+#define MAX_CONNECTIONS 100
+#define PORT 8080
+
 #define PRINT_MESSAGE_COLOR "#0059ff"
 #define PRINT_MESSAGE_STATUS "#42ff62"
 
@@ -39,18 +42,27 @@ typedef struct {
 
 ENV env;
 
-void sigint_handler(int signo);
+void sigint_handler();
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
-int extract_request(char **buffer, int client_socket);
-void *router(void *p_client_socket, int conn_index);
+int read_request(char **request_buffer, int client_socket);
+int router(void *p_client_socket, int conn_index);
 void *threads_handler(void *arg);
-void print_colored_message(const char *color, const char *format, ...);
+int print_colored_message(const char *hex_color, const char *format, ...);
 void print_banner();
+void threads_cleanup(unsigned short number);
+void db_connection_pool_cleanup(unsigned short number);
 
+/* Reviewed: Fri 16. Feb 2024 */
 int main() {
+    unsigned short i;
+
     print_banner();
 
+    /**
+     * Registers a signal handler for SIGINT (to terminate the process) to exit the
+     * program gracefully for Valgrind to show the program report.
+     */
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
         log_error("Failed to set up signal handler\n");
         exit(EXIT_FAILURE);
@@ -70,17 +82,30 @@ int main() {
     db_connection_values[4] = env.DB_PORT;
     db_connection_values[5] = NULL;
 
-    pthread_key_create(&thread_index_key, NULL);
+    if (pthread_key_create(&thread_index_key, NULL) != 0) {
+        log_error("Failed to create key for thread\n");
+        exit(EXIT_FAILURE);
+    }
 
-    /* Spin up threads and db connection pool */
-    int i;
+    /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
         thread_indices[i] = i;
-        pthread_create(&thread_pool[i], NULL, threads_handler, &thread_indices[i]);
-        conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
+        if (pthread_create(&thread_pool[i], NULL, threads_handler, &thread_indices[i]) != 0) {
+            /** Clean up created threads from previous iterations */
+            threads_cleanup(i);
 
+            log_error("Failed to create thread\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    for (i = 0; i < POOL_SIZE; i++) {
+        conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
         if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
-            log_error(PQerrorMessage(conn_pool[i]));
+            /** Clean up created db connections from previous iterations */
+            db_connection_pool_cleanup(i);
+
+            log_error("Failed to create db connection pool\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -89,7 +114,9 @@ int main() {
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
     if (setup_server_socket(&server_socket) == -1) {
-        /* PQfinish(conn); */
+        close(server_socket);
+        threads_cleanup(POOL_SIZE);
+        db_connection_pool_cleanup(POOL_SIZE);
         exit(EXIT_FAILURE);
     }
 
@@ -105,17 +132,39 @@ int main() {
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
             close(server_socket);
-            /* PQfinish(conn); */
+            threads_cleanup(POOL_SIZE);
+            db_connection_pool_cleanup(POOL_SIZE);
             exit(EXIT_FAILURE);
         }
 
         int *p_client_socket = malloc(sizeof(int));
         *p_client_socket = client_socket;
 
-        pthread_mutex_lock(&thread_mutex);
+        if (pthread_mutex_lock(&thread_mutex) != 0) {
+            log_error("Failed to lock mutex\n");
+            close(server_socket);
+            threads_cleanup(POOL_SIZE);
+            db_connection_pool_cleanup(POOL_SIZE);
+            exit(EXIT_FAILURE);
+        }
+
         enqueue(p_client_socket);
-        pthread_cond_signal(&thread_condition_var);
-        pthread_mutex_unlock(&thread_mutex);
+
+        if (pthread_cond_signal(&thread_condition_var) != 0) {
+            log_error("Failed to unlock mutex\n");
+            close(server_socket);
+            threads_cleanup(POOL_SIZE);
+            db_connection_pool_cleanup(POOL_SIZE);
+            exit(EXIT_FAILURE);
+        }
+
+        if (pthread_mutex_unlock(&thread_mutex) != 0) {
+            log_error("Failed to unlock mutex\n");
+            close(server_socket);
+            threads_cleanup(POOL_SIZE);
+            db_connection_pool_cleanup(POOL_SIZE);
+            exit(EXIT_FAILURE);
+        }
     }
 
     return 0;
@@ -123,87 +172,71 @@ int main() {
 
 void *threads_handler(void *arg) {
     int *thread_index = (int *)arg;
+
+    /** TODO: handle pthread_setspecific error case */
     pthread_setspecific(thread_index_key, thread_index);
 
     while (1) {
         int *p_client_socket;
-        pthread_mutex_lock(&thread_mutex);
+        if (pthread_mutex_lock(&thread_mutex) != 0) {
+            /** TODO: cleanup */
+        }
 
         if ((p_client_socket = dequeue()) == NULL) {
             pthread_cond_wait(&thread_condition_var, &thread_mutex);
             p_client_socket = dequeue();
         }
 
-        pthread_mutex_unlock(&thread_mutex);
+        if (pthread_mutex_unlock(&thread_mutex) != 0) {
+            /** TODO: cleanup */
+        }
         if (p_client_socket != NULL) {
-            router(p_client_socket, *thread_index);
-        }
-    }
-}
-
-int extract_request(char **buffer, int client_socket) {
-    size_t buffer_size = 1024;
-
-    *buffer = (char *)malloc((buffer_size * (sizeof **buffer)) + 1);
-    if (*buffer == NULL) {
-        log_error("Failed to allocate memory for *buffer\n");
-        return -1;
-    }
-
-    (*buffer)[0] = '\0';
-
-    size_t total_bytes_received = 0;
-    int bytes_received;
-    while ((bytes_received = recv(client_socket, (*buffer) + total_bytes_received, buffer_size - total_bytes_received, 0)) > 0) {
-        total_bytes_received += bytes_received;
-
-        if (total_bytes_received >= buffer_size) {
-            buffer_size *= 2;
-            (*buffer) = realloc((*buffer), buffer_size);
-            if ((*buffer) == NULL) {
-                perror("realloc");
-                log_error("Failed to reallocate memory for *buffer\n");
-                close(server_socket);
-                close(client_socket);
-                free(*buffer);
-                *buffer = NULL;
-                return -1;
+            if (router(p_client_socket, *thread_index) == -1) {
+                /** TODO: cleanup */
             }
-        } else {
-            break;
         }
     }
-
-    if (bytes_received == -1) {
-        log_error("Failed extract headers from *buffer\n");
-        close(server_socket);
-        close(client_socket);
-        free(*buffer);
-        *buffer = NULL;
-        /* PQfinish(conn); */
-        return -1;
-    }
-
-    (*buffer)[buffer_size] = '\0';
-
-    return 0;
 }
 
-void *router(void *p_client_socket, int conn_index) {
+int router(void *p_client_socket, int conn_index) {
     int client_socket = *((int *)p_client_socket);
+
     free(p_client_socket);
     p_client_socket = NULL;
 
     char *request = NULL;
-    extract_request(&request, client_socket);
+    if (read_request(&request, client_socket) == -1) {
+        close(server_socket);
+        close(client_socket);
+        free(request);
+        request = NULL;
+        return -1;
+    }
+
+    if (strlen(request) == 0) {
+        log_error("Request is empty\n");
+        close(server_socket);
+        close(client_socket);
+        free(request);
+        request = NULL;
+        return -1;
+    }
 
     HttpRequest parsed_http_request;
-    web_utils_parse_http_request(&parsed_http_request, request);
+    if (web_utils_parse_http_request(&parsed_http_request, request) == -1) {
+        close(server_socket);
+        close(client_socket);
+        free(request);
+        request = NULL;
+        web_utils_http_request_free(&parsed_http_request);
+        return -1;
+    }
 
     free(request);
     request = NULL;
 
     if (has_file_extension(parsed_http_request.url, ".css") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
+        /** TODO: improve http response headers */
         char response_headers[] = "HTTP/1.1 200 OK\r\n"
                                   "Content-Type: text/css\r\n"
                                   "\r\n";
@@ -211,12 +244,13 @@ void *router(void *p_client_socket, int conn_index) {
         if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
             close(server_socket);
             close(client_socket);
-            /* PQfinish(conn); */
-            return NULL;
+            web_utils_http_request_free(&parsed_http_request);
+            return -1;
         }
     }
 
     if (has_file_extension(parsed_http_request.url, ".js") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
+        /** TODO: improve http response headers */
         char response_headers[] = "HTTP/1.1 200 OK\r\n"
                                   "Content-Type: application/javascript\r\n"
                                   "\r\n";
@@ -224,8 +258,8 @@ void *router(void *p_client_socket, int conn_index) {
         if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
             close(server_socket);
             close(client_socket);
-            /* PQfinish(conn); */
-            return NULL;
+            web_utils_http_request_free(&parsed_http_request);
+            return -1;
         }
     }
 
@@ -235,12 +269,13 @@ void *router(void *p_client_socket, int conn_index) {
             if (construct_public_route_file_path(&public_route, parsed_http_request.url) == -1) {
                 close(server_socket);
                 close(client_socket);
+                web_utils_http_request_free(&parsed_http_request);
                 free(public_route);
                 public_route = NULL;
-                /* PQfinish(conn); */
-                return NULL;
+                return -1;
             }
 
+            /** TODO: improve http response headers */
             char response_headers[] = "HTTP/1.1 200 OK\r\n"
                                       "Content-Type: text/html\r\n"
                                       "\r\n";
@@ -248,13 +283,16 @@ void *router(void *p_client_socket, int conn_index) {
             if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
                 close(server_socket);
                 close(client_socket);
+                web_utils_http_request_free(&parsed_http_request);
                 free(public_route);
                 public_route = NULL;
-                /* PQfinish(conn); */
-                return NULL;
+                return -1;
             }
         }
     }
+
+    free(public_route);
+    public_route = NULL;
 
     /**
      * Routes start here
@@ -264,8 +302,8 @@ void *router(void *p_client_socket, int conn_index) {
             if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
                 close(server_socket);
                 close(client_socket);
-                /* PQfinish(conn); */
-                return NULL;
+                web_utils_http_request_free(&parsed_http_request);
+                return -1;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
@@ -273,8 +311,8 @@ void *router(void *p_client_socket, int conn_index) {
             if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
                 close(server_socket);
                 close(client_socket);
-                /* PQfinish(conn); */
-                return NULL;
+                web_utils_http_request_free(&parsed_http_request);
+                return -1;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
@@ -282,8 +320,8 @@ void *router(void *p_client_socket, int conn_index) {
             if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
                 close(server_socket);
                 close(client_socket);
-                /* PQfinish(conn); */
-                return NULL;
+                web_utils_http_request_free(&parsed_http_request);
+                return -1;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
@@ -291,27 +329,84 @@ void *router(void *p_client_socket, int conn_index) {
             if (web_page_ui_test_get(client_socket, &parsed_http_request, conn_index) == -1) {
                 close(server_socket);
                 close(client_socket);
-                /* PQfinish(conn); */
-                return NULL;
+                web_utils_http_request_free(&parsed_http_request);
+                return -1;
             }
         }
     } else {
         if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
             close(server_socket);
             close(client_socket);
-            /* PQfinish(conn); */
-            return NULL;
+            web_utils_http_request_free(&parsed_http_request);
+            return -1;
         }
     }
 
-    free(public_route);
-    public_route = NULL;
-
     web_utils_http_request_free(&parsed_http_request);
 
-    return NULL;
+    return 0;
 }
 
+/* Reviewed: Fri 17. Feb 2024 */
+int read_request(char **request_buffer, int client_socket) {
+    size_t buffer_size = 1024;
+
+    *request_buffer = (char *)malloc((buffer_size * (sizeof **request_buffer)) + 1);
+    if (*request_buffer == NULL) {
+        log_error("Failed to allocate memory for *request_buffer\n");
+        return -1;
+    }
+
+    (*request_buffer)[0] = '\0';
+
+    size_t chunk_read = 0;
+    int bytes_read;
+    while ((bytes_read = recv(client_socket, (*request_buffer) + chunk_read, buffer_size - chunk_read, 0)) > 0) {
+        chunk_read += bytes_read;
+
+        if (chunk_read >= buffer_size) {
+            buffer_size *= 2;
+            (*request_buffer) = realloc((*request_buffer), buffer_size);
+            if ((*request_buffer) == NULL) {
+                log_error("Failed to reallocate memory for *request_buffer\n");
+                free(*request_buffer);
+                *request_buffer = NULL;
+                return -1;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (bytes_read == -1) {
+        log_error("Failed extract headers from *request_buffer\n");
+        free(*request_buffer);
+        *request_buffer = NULL;
+        return -1;
+    }
+
+    (*request_buffer)[buffer_size] = '\0';
+
+    return 0;
+}
+
+/* Reviewed: Fri 16. Feb 2024 */
+void threads_cleanup(unsigned short number) {
+    unsigned short i;
+    for (i = 0; i < number; i++) {
+        pthread_join(thread_pool[i], NULL);
+    }
+}
+
+/* Reviewed: Fri 16. Feb 2024 */
+void db_connection_pool_cleanup(unsigned short number) {
+    unsigned short i;
+    for (i = 0; i < number; i++) {
+        PQfinish(conn_pool[i]);
+    }
+}
+
+/* Reviewed: Fri 17. Feb 2024 */
 /**
  * @return 0 if the file path has the specified extension, 1 otherwise.
  */
@@ -330,27 +425,24 @@ unsigned int has_file_extension(const char *file_path, const char *extension) {
     return 1;
 }
 
-void sigint_handler(int signo) {
-    /**
-     * SIGINT (Ctrl+C) for graceful server exit, required by valgrind to report memory leaks.
-     */
-    if (signo == SIGINT) {
-        printf("\nReceived SIGINT, exiting...\n");
-        keep_running = 0;
-    }
+/* Reviewed: Fri 16. Feb 2024 */
+void sigint_handler() {
+    printf("\nReceived SIGINT, exiting...\n");
+    keep_running = 0;
 }
 
-void print_colored_message(const char *color, const char *format, ...) {
-    /* Ensure the hex color starts with '#' and extract decimal values */
-    if (color[0] != '#' || strlen(color) != 7) {
+/* Reviewed: Fri 17. Feb 2024 */
+int print_colored_message(const char *hex_color, const char *format, ...) {
+    /** Ensure the hex_color starts with '#' and extract decimal values */
+    if (hex_color[0] != '#' || strlen(hex_color) != 7) {
         printf("Invalid color format. Please use the format '#RRGGBB'.\n");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     unsigned int r, g, b;
-    sscanf(color + 1, "%2x%2x%2x", &r, &g, &b);
+    sscanf(hex_color + 1, "%2x%2x%2x", &r, &g, &b);
 
-    /* Print message with specified color and formatting */
+    /** Print message with specified color and formatting */
     printf("\033[0;38;2;%d;%d;%dm", r, g, b);
 
     va_list args;
@@ -359,13 +451,16 @@ void print_colored_message(const char *color, const char *format, ...) {
     va_end(args);
 
     printf("\033[0m");
+
+    return 0;
 }
 
+/* Reviewed: Fri 17. Feb 2024 */
 int setup_server_socket(int *fd) {
     *fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (*fd == -1) {
-        log_error("Failed to create server *fd\n");
+        log_error("Failed to create server socket\n");
         return -1;
     }
 
@@ -392,13 +487,13 @@ int setup_server_socket(int *fd) {
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(*fd, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
-        log_error("Failed to bind *fd to address and port\n");
+        log_error("Failed to bind server socker to address and port\n");
         close(*fd);
         return -1;
     }
 
     if (listen(*fd, MAX_CONNECTIONS) == -1) {
-        log_error("Failed to set up *fd to listen for incoming connections\n");
+        log_error("Failed to set up server socker to listen for incoming connections\n");
         close(*fd);
         return -1;
     }
@@ -406,6 +501,7 @@ int setup_server_socket(int *fd) {
     return 0;
 }
 
+/* Reviewed: Fri 16. Feb 2024 */
 void print_banner() {
     /*
     print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");

@@ -1,5 +1,5 @@
 .DS_Store
 .devcontainer
 .vscode
-build
 .env.prod
+build

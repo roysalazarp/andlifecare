@@ -22,6 +22,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         return -1;
     }
 
+    /** TODO: improve http response headers */
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n";

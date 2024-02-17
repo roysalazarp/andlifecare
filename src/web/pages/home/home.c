@@ -12,7 +12,9 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
+/* Reviewed: Fri 17. Feb 2024 */
 int web_page_home_get(int client_socket, HttpRequest *request) {
+    /** TODO: improve http response headers */
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n";

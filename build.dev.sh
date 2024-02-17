@@ -1,8 +1,8 @@
 #!/bin/bash
 
 CC=gcc
-CFLAGS="-std=c89 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable -pedantic -g -O3"
-LDFLAGS="-I/usr/include/postgresql -lpq -pthread"
+CFLAGS="-std=c89 -g -O3 -Wall -Wextra -Werror -pedantic -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable"
+LDFLAGS="-I/usr/include/postgresql -lpq -largon2 -pthread"
 
 SRC_DIR="src"
 BUILD_DIR="build"

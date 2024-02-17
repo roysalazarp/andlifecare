@@ -2,6 +2,7 @@
 #include <linux/limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "core/core.h"
 #include "globals.h"
@@ -46,7 +47,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         return -1;
     }
 
-    long query_file_size = calculate_file_size(query_absolute_path);
+    ssize_t query_file_size = calculate_file_size(query_absolute_path);
 
     char *users_query;
     users_query = (char *)malloc(query_file_size * (sizeof *users_query) + 1);
@@ -138,7 +139,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         return -1;
     }
 
-    long query_file_size = calculate_file_size(query_absolute_path);
+    ssize_t query_file_size = calculate_file_size(query_absolute_path);
 
     char *countries_query;
     countries_query = (char *)malloc(query_file_size * (sizeof *countries_query) + 1);

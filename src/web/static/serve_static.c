@@ -8,31 +8,32 @@
 #include "globals.h"
 #include "utils/utils.h"
 
+/* Reviewed: Fri 17. Feb 2024 */
 int web_serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
-    char *file_path;
-    file_path = (char *)malloc(PATH_MAX * (sizeof *file_path) + 1);
-    if (file_path == NULL) {
-        log_error("Failed to allocate memory for file_path\n");
+    char *file_absolute_path;
+    file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
+    if (file_absolute_path == NULL) {
+        log_error("Failed to allocate memory for file_absolute_path\n");
         return -1;
     }
 
-    file_path[0] = '\0';
+    file_absolute_path[0] = '\0';
 
     /**
-     * Remove the leading slash if the path is not the root path.
+     * if the path IS NOT the root url remove the leading slash
      */
     if (strcmp(path, "/") != 0) {
         path++;
     }
 
-    if (build_absolute_path(file_path, path) == -1) {
+    if (build_absolute_path(file_absolute_path, path) == -1) {
         return -1;
     }
 
-    long file_size = calculate_file_size(file_path);
+    ssize_t file_size = calculate_file_size(file_absolute_path);
     if (file_size == -1) {
-        free(file_path);
-        file_path = NULL;
+        free(file_absolute_path);
+        file_absolute_path = NULL;
         return -1;
     }
 
@@ -41,20 +42,20 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     response = (char *)malloc(response_length * (sizeof *response) + 1);
     if (response == NULL) {
         log_error("Failed to allocate memory for response\n");
-        free(file_path);
-        file_path = NULL;
+        free(file_absolute_path);
+        file_absolute_path = NULL;
         return -1;
     }
 
     response[0] = '\0';
 
-    /* Add the response headers to buffer */
+    /* Add headers to response */
     strcpy(response, response_headers);
 
-    /* Add the file contents to buffer */
-    if (read_file(response + response_headers_length, file_path, file_size) == -1) {
-        free(file_path);
-        file_path = NULL;
+    /* Add the file contents to the response */
+    if (read_file(response + response_headers_length, file_absolute_path, file_size) == -1) {
+        free(file_absolute_path);
+        file_absolute_path = NULL;
         free(response);
         response = NULL;
         return -1;
@@ -62,10 +63,9 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
 
     response[response_length] = '\0';
 
-    free(file_path);
-    file_path = NULL;
+    free(file_absolute_path);
+    file_absolute_path = NULL;
 
-    /* Send the HTTP response */
     if (send(client_socket, response, response_length, 0) == -1) {
         log_error("Failed send HTTP response\n");
         free(response);
@@ -80,6 +80,7 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     return 0;
 }
 
+/* Reviewed: Fri 17. Feb 2024 */
 int construct_public_route_file_path(char **path_buffer, char *url) {
     char public_folder[] = "/src/web/pages/public";
     char file_extension[] = ".html";
@@ -90,15 +91,19 @@ int construct_public_route_file_path(char **path_buffer, char *url) {
         return -1;
     }
 
-    sprintf(*path_buffer, "%s%s%s", public_folder, url, file_extension);
+    if (sprintf(*path_buffer, "%s%s%s", public_folder, url, file_extension) < 0) {
+        log_error("Failed to construct public route file path\n");
+        return -1;
+    }
 
     return 0;
 }
 
-unsigned int requested_public_route(char *url) {
+/* Reviewed: Fri 17. Feb 2024 */
+unsigned int requested_public_route(const char *url) {
     char *public_routes[] = {"/home", "/about", NULL};
 
-    int i;
+    unsigned short i;
     for (i = 0; public_routes[i] != NULL; i++) {
         if (strcmp(url, public_routes[i]) == 0) {
             return 0;

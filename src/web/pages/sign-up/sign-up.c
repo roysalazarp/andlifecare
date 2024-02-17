@@ -20,7 +20,9 @@ int verify_password(const char *password, const char *hash);
 int hash_password(const char *password, char *hash, size_t hash_len);
 void generate_salt(char *salt, size_t salt_size);
 
+/* Reviewed: Fri 17. Feb 2024 */
 int web_page_sign_up_get(int client_socket, HttpRequest *request) {
+    /** TODO: improve http response headers */
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
                               "Content-Type: text/html\r\n"
                               "\r\n";
