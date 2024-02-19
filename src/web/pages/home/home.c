@@ -44,6 +44,5 @@ int web_page_home_get(int client_socket, HttpRequest *request) {
     free(response);
     response = NULL;
 
-    close(client_socket);
     return 0;
 }

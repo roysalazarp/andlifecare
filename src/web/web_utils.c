@@ -67,42 +67,44 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
     return 0;
 }
 
-char ***web_utils_matrix_2d_allocation(char ***p, int d1, int d2) {
-    int i;
-    p = (char ***)malloc(d1 * sizeof(char **));
-    if (p == NULL) {
-        log_error("Failed to allocate memory for p\n");
+/* Reviewed: Fri 18. Feb 2024 */
+char ***web_utils_matrix_2d_allocation(char ***p_matrix, unsigned int level1_size, unsigned int level2_size) {
+    p_matrix = (char ***)malloc(level1_size * sizeof(char **));
+    if (p_matrix == NULL) {
+        log_error("Failed to allocate memory for p_matrix level 1\n");
         return NULL;
     }
 
-    for (i = 0; i < d1; ++i) {
-        p[i] = (char **)malloc(d2 * sizeof(char *));
-        if (p[i] == NULL) {
-            log_error("Failed to allocate memory for p[i]\n");
-            int j;
-            for (j = 0; j < i; ++j) {
-                free(p[j]);
-                p[j] = NULL;
+    unsigned int i;
+    for (i = 0; i < level1_size; ++i) {
+        p_matrix[i] = (char **)malloc(level2_size * sizeof(char *));
+        if (p_matrix[i] == NULL) {
+            log_error("Failed to allocate memory for p_matrix level 2\n");
+            unsigned int k;
+            for (k = 0; k < i; ++k) {
+                free(p_matrix[k]);
+                p_matrix[k] = NULL;
             }
-            free(p);
-            p = NULL;
+            free(p_matrix);
+            p_matrix = NULL;
             return NULL;
         }
     }
 
-    return p;
+    return p_matrix;
 }
 
-void web_utils_matrix_2d_free(char ***p, int d1, int d2) {
-    int i;
+/* Reviewed: Fri 18. Feb 2024 */
+void web_utils_matrix_2d_free(char ***p_matrix, unsigned int level1_size) {
+    unsigned int i;
 
-    for (i = 0; i < d1; i++) {
-        free(p[i]);
-        p[i] = NULL;
+    for (i = 0; i < level1_size; i++) {
+        free(p_matrix[i]);
+        p_matrix[i] = NULL;
     }
 
-    free(p);
-    p = NULL;
+    free(p_matrix);
+    p_matrix = NULL;
 }
 
 /* Reviewed: Fri 17. Feb 2024 */

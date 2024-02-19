@@ -76,7 +76,6 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     free(response);
     response = NULL;
 
-    close(client_socket);
     return 0;
 }
 
@@ -93,6 +92,8 @@ int construct_public_route_file_path(char **path_buffer, char *url) {
 
     if (sprintf(*path_buffer, "%s%s%s", public_folder, url, file_extension) < 0) {
         log_error("Failed to construct public route file path\n");
+        free(*path_buffer);
+        *path_buffer = NULL;
         return -1;
     }
 

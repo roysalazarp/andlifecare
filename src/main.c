@@ -47,13 +47,14 @@ unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
 int read_request(char **request_buffer, int client_socket);
 int router(void *p_client_socket, int conn_index);
-void *threads_handler(void *arg);
+void *thread_function(void *arg);
 int print_colored_message(const char *hex_color, const char *format, ...);
 void print_banner();
 void threads_cleanup(unsigned short number);
 void db_connection_pool_cleanup(unsigned short number);
+void cleanup_main(unsigned short number_of_threads, unsigned short number_of_connections);
 
-/* Reviewed: Fri 16. Feb 2024 */
+/* Reviewed: Fri 19. Feb 2024 */
 int main() {
     unsigned short i;
 
@@ -73,6 +74,13 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    if (setup_server_socket(&server_socket) == -1) {
+        exit(EXIT_FAILURE);
+    }
+
+    print_colored_message(PRINT_MESSAGE_COLOR, "Server listening on port %d: ", PORT);
+    print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
+
     const char *db_connection_keywords[] = {"dbname", "user", "password", "host", "port", NULL};
     const char *db_connection_values[6];
     db_connection_values[0] = env.DB_NAME;
@@ -90,11 +98,9 @@ int main() {
     /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
         thread_indices[i] = i;
-        if (pthread_create(&thread_pool[i], NULL, threads_handler, &thread_indices[i]) != 0) {
-            /** Clean up created threads from previous iterations */
-            threads_cleanup(i);
-
+        if (pthread_create(&thread_pool[i], NULL, thread_function, &thread_indices[i]) != 0) {
             log_error("Failed to create thread\n");
+            cleanup_main(i, 0);
             exit(EXIT_FAILURE);
         }
     }
@@ -102,25 +108,13 @@ int main() {
     for (i = 0; i < POOL_SIZE; i++) {
         conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
         if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
-            /** Clean up created db connections from previous iterations */
-            db_connection_pool_cleanup(i);
-
             log_error("Failed to create db connection pool\n");
+            cleanup_main(POOL_SIZE, i);
             exit(EXIT_FAILURE);
         }
     }
 
     print_colored_message(PRINT_MESSAGE_COLOR, "DB connection established: ");
-    print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
-
-    if (setup_server_socket(&server_socket) == -1) {
-        close(server_socket);
-        threads_cleanup(POOL_SIZE);
-        db_connection_pool_cleanup(POOL_SIZE);
-        exit(EXIT_FAILURE);
-    }
-
-    print_colored_message(PRINT_MESSAGE_COLOR, "Server listening on port %d: ", PORT);
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
     while (keep_running) {
@@ -131,9 +125,7 @@ int main() {
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
-            close(server_socket);
-            threads_cleanup(POOL_SIZE);
-            db_connection_pool_cleanup(POOL_SIZE);
+            cleanup_main(POOL_SIZE, POOL_SIZE);
             exit(EXIT_FAILURE);
         }
 
@@ -142,9 +134,7 @@ int main() {
 
         if (pthread_mutex_lock(&thread_mutex) != 0) {
             log_error("Failed to lock mutex\n");
-            close(server_socket);
-            threads_cleanup(POOL_SIZE);
-            db_connection_pool_cleanup(POOL_SIZE);
+            cleanup_main(POOL_SIZE, POOL_SIZE);
             exit(EXIT_FAILURE);
         }
 
@@ -152,17 +142,13 @@ int main() {
 
         if (pthread_cond_signal(&thread_condition_var) != 0) {
             log_error("Failed to unlock mutex\n");
-            close(server_socket);
-            threads_cleanup(POOL_SIZE);
-            db_connection_pool_cleanup(POOL_SIZE);
+            cleanup_main(POOL_SIZE, POOL_SIZE);
             exit(EXIT_FAILURE);
         }
 
         if (pthread_mutex_unlock(&thread_mutex) != 0) {
             log_error("Failed to unlock mutex\n");
-            close(server_socket);
-            threads_cleanup(POOL_SIZE);
-            db_connection_pool_cleanup(POOL_SIZE);
+            cleanup_main(POOL_SIZE, POOL_SIZE);
             exit(EXIT_FAILURE);
         }
     }
@@ -170,7 +156,28 @@ int main() {
     return 0;
 }
 
-void *threads_handler(void *arg) {
+void cleanup_main(unsigned short number_of_threads, unsigned short number_of_connections) {
+    close(server_socket);
+
+    if (number_of_threads > 0) {
+        threads_cleanup(number_of_threads);
+    }
+
+    if (number_of_connections > 0) {
+        db_connection_pool_cleanup(number_of_connections);
+    }
+
+    /** NOTE: Not sure this is necessary */
+    unsigned short i;
+    for (i = 0; i < POOL_SIZE; i++) {
+        int *p;
+        if ((p = dequeue()) == NULL) {
+            break;
+        }
+    }
+}
+
+void *thread_function(void *arg) {
     int *thread_index = (int *)arg;
 
     /** TODO: handle pthread_setspecific error case */
@@ -192,48 +199,39 @@ void *threads_handler(void *arg) {
         }
         if (p_client_socket != NULL) {
             if (router(p_client_socket, *thread_index) == -1) {
-                /** TODO: cleanup */
+                cleanup_main(POOL_SIZE, POOL_SIZE);
+                exit(EXIT_FAILURE);
             }
         }
     }
+
+    return NULL;
 }
 
 int router(void *p_client_socket, int conn_index) {
-    int client_socket = *((int *)p_client_socket);
+    int retval = 0;
 
+    int client_socket = *((int *)p_client_socket);
     free(p_client_socket);
     p_client_socket = NULL;
 
     char *request = NULL;
     if (read_request(&request, client_socket) == -1) {
-        close(server_socket);
-        close(client_socket);
-        free(request);
-        request = NULL;
-        return -1;
+        retval = -1;
+        goto socket_cleanup;
     }
 
     if (strlen(request) == 0) {
         log_error("Request is empty\n");
-        close(server_socket);
-        close(client_socket);
-        free(request);
-        request = NULL;
-        return -1;
+        retval = -1;
+        goto cleanup_request_buffer;
     }
 
     HttpRequest parsed_http_request;
     if (web_utils_parse_http_request(&parsed_http_request, request) == -1) {
-        close(server_socket);
-        close(client_socket);
-        free(request);
-        request = NULL;
-        web_utils_http_request_free(&parsed_http_request);
-        return -1;
+        retval = -1;
+        goto cleanup_request_buffer;
     }
-
-    free(request);
-    request = NULL;
 
     if (has_file_extension(parsed_http_request.url, ".css") == 0 && strcmp(parsed_http_request.method, "GET") == 0) {
         /** TODO: improve http response headers */
@@ -242,10 +240,8 @@ int router(void *p_client_socket, int conn_index) {
                                   "\r\n";
 
         if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
-            close(server_socket);
-            close(client_socket);
-            web_utils_http_request_free(&parsed_http_request);
-            return -1;
+            retval = -1;
+            goto cleanup_parsed_request;
         }
     }
 
@@ -256,10 +252,8 @@ int router(void *p_client_socket, int conn_index) {
                                   "\r\n";
 
         if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
-            close(server_socket);
-            close(client_socket);
-            web_utils_http_request_free(&parsed_http_request);
-            return -1;
+            retval = -1;
+            goto cleanup_parsed_request;
         }
     }
 
@@ -267,12 +261,8 @@ int router(void *p_client_socket, int conn_index) {
     if (requested_public_route(parsed_http_request.url) == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
             if (construct_public_route_file_path(&public_route, parsed_http_request.url) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                free(public_route);
-                public_route = NULL;
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
 
             /** TODO: improve http response headers */
@@ -281,18 +271,11 @@ int router(void *p_client_socket, int conn_index) {
                                       "\r\n";
 
             if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                free(public_route);
-                public_route = NULL;
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
         }
     }
-
-    free(public_route);
-    public_route = NULL;
 
     /**
      * Routes start here
@@ -300,51 +283,53 @@ int router(void *p_client_socket, int conn_index) {
     if (strcmp(parsed_http_request.url, "/") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
             if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
             if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
         if (strcmp(parsed_http_request.method, "POST") == 0) {
             if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
             if (web_page_ui_test_get(client_socket, &parsed_http_request, conn_index) == -1) {
-                close(server_socket);
-                close(client_socket);
-                web_utils_http_request_free(&parsed_http_request);
-                return -1;
+                retval = -1;
+                goto cleanup;
             }
         }
     } else {
         if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
-            close(server_socket);
-            close(client_socket);
-            web_utils_http_request_free(&parsed_http_request);
-            return -1;
+            retval = -1;
+            goto cleanup;
         }
     }
 
+cleanup:
+    free(public_route);
+    public_route = NULL;
+
+cleanup_parsed_request:
     web_utils_http_request_free(&parsed_http_request);
 
-    return 0;
+cleanup_request_buffer:
+    free(request);
+    request = NULL;
+
+socket_cleanup:
+    close(client_socket);
+
+    return retval;
 }
 
 /* Reviewed: Fri 17. Feb 2024 */

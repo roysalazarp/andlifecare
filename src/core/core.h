@@ -15,7 +15,7 @@ typedef struct {
 typedef struct {
     User *users;
     char columns[ROWS][10]; /* 'full_name' the current largest column name contains 9 characters */
-    int rows;
+    unsigned int rows;
 } UsersData;
 
 typedef struct {
@@ -27,7 +27,7 @@ typedef struct {
 typedef struct {
     Country *countries;
     char columns[ROWS][13]; /* 'country_name' the current largest column name contains 12 characters */
-    int rows;
+    unsigned int rows;
 } CountriesData;
 
 typedef struct {

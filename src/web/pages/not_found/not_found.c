@@ -12,7 +12,5 @@ int web_page_not_found(int client_socket, HttpRequest *request) {
                       "<html><body><h1>404 Not Found</h1></body></html>";
     send(client_socket, response, strlen(response), 0);
 
-    close(client_socket);
-
     return 0;
 }

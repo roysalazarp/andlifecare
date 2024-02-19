@@ -46,7 +46,6 @@ int web_page_sign_up_get(int client_socket, HttpRequest *request) {
     free(response);
     response = NULL;
 
-    close(client_socket);
     return 0;
 }
 
@@ -121,9 +120,6 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
         log_error("Failed send HTTP response\n");
         return -1;
     }
-
-    close(client_socket);
-    return 0;
 
     return 0;
 }
