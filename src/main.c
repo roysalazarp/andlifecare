@@ -28,7 +28,6 @@ int server_socket;
 PGconn *conn_pool[POOL_SIZE];
 pthread_t thread_pool[POOL_SIZE];
 pthread_key_t thread_index_key;
-int thread_indices[POOL_SIZE];
 pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
 
@@ -46,17 +45,20 @@ void sigint_handler();
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
 int read_request(char **request_buffer, int client_socket);
-int router(void *p_client_socket, int conn_index);
+int router(void *p_client_socket, unsigned short conn_index);
 void *thread_function(void *arg);
 int print_colored_message(const char *hex_color, const char *format, ...);
 void print_banner();
-void threads_cleanup(unsigned short number);
-void db_connection_pool_cleanup(unsigned short number);
-void cleanup_main(unsigned short number_of_threads, unsigned short number_of_connections);
 
 /* Reviewed: Fri 19. Feb 2024 */
 int main() {
+    int retval = 0;
+
     unsigned short i;
+
+    for (i = 0; i < POOL_SIZE; i++) {
+        conn_pool[i] = NULL;
+    }
 
     print_banner();
 
@@ -71,11 +73,13 @@ int main() {
 
     if (load_values_from_file(&env, ".env.dev") == -1) {
         log_error("Failed to load env variables from file\n");
-        exit(EXIT_FAILURE);
+        retval = -1;
+        goto main_cleanup;
     }
 
     if (setup_server_socket(&server_socket) == -1) {
-        exit(EXIT_FAILURE);
+        retval = -1;
+        goto main_cleanup;
     }
 
     print_colored_message(PRINT_MESSAGE_COLOR, "Server listening on port %d: ", PORT);
@@ -92,16 +96,18 @@ int main() {
 
     if (pthread_key_create(&thread_index_key, NULL) != 0) {
         log_error("Failed to create key for thread\n");
-        exit(EXIT_FAILURE);
+        retval = -1;
+        goto main_cleanup;
     }
 
     /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
-        thread_indices[i] = i;
-        if (pthread_create(&thread_pool[i], NULL, thread_function, &thread_indices[i]) != 0) {
+        unsigned short *a = malloc(sizeof(unsigned short));
+        *a = i;
+        if (pthread_create(&thread_pool[*a], NULL, &thread_function, a) != 0) {
             log_error("Failed to create thread\n");
-            cleanup_main(i, 0);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
     }
 
@@ -109,8 +115,8 @@ int main() {
         conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
         if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
             log_error("Failed to create db connection pool\n");
-            cleanup_main(POOL_SIZE, i);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
     }
 
@@ -125,60 +131,60 @@ int main() {
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
-            cleanup_main(POOL_SIZE, POOL_SIZE);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
 
-        int *p_client_socket = malloc(sizeof(int));
-        *p_client_socket = client_socket;
+        int *p_c_s = malloc(sizeof(int));
+        *p_c_s = client_socket;
 
         if (pthread_mutex_lock(&thread_mutex) != 0) {
             log_error("Failed to lock mutex\n");
-            cleanup_main(POOL_SIZE, POOL_SIZE);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
 
-        enqueue(p_client_socket);
+        enqueue(p_c_s);
 
         if (pthread_cond_signal(&thread_condition_var) != 0) {
             log_error("Failed to unlock mutex\n");
-            cleanup_main(POOL_SIZE, POOL_SIZE);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
 
         if (pthread_mutex_unlock(&thread_mutex) != 0) {
             log_error("Failed to unlock mutex\n");
-            cleanup_main(POOL_SIZE, POOL_SIZE);
-            exit(EXIT_FAILURE);
+            retval = -1;
+            goto main_cleanup;
         }
     }
 
-    return 0;
-}
+main_cleanup:
 
-void cleanup_main(unsigned short number_of_threads, unsigned short number_of_connections) {
+    for (i = 0; i < POOL_SIZE; i++) {
+        PQfinish(conn_pool[i]);
+    }
+
     close(server_socket);
 
-    if (number_of_threads > 0) {
-        threads_cleanup(number_of_threads);
-    }
+    printf("Before pthread_join\n");
 
-    if (number_of_connections > 0) {
-        db_connection_pool_cleanup(number_of_connections);
-    }
-
-    /** NOTE: Not sure this is necessary */
-    unsigned short i;
+    /*
+    pthread_exit(0);
     for (i = 0; i < POOL_SIZE; i++) {
-        int *p;
-        if ((p = dequeue()) == NULL) {
-            break;
-        }
+        pthread_join(thread_pool[i], NULL);
     }
+     */
+
+    printf("Exiting program\n");
+
+    return retval;
 }
 
 void *thread_function(void *arg) {
-    int *thread_index = (int *)arg;
+    unsigned short *thread_index = (unsigned short *)arg;
+
+    printf("%d\n", *thread_index);
 
     /** TODO: handle pthread_setspecific error case */
     pthread_setspecific(thread_index_key, thread_index);
@@ -199,16 +205,19 @@ void *thread_function(void *arg) {
         }
         if (p_client_socket != NULL) {
             if (router(p_client_socket, *thread_index) == -1) {
-                cleanup_main(POOL_SIZE, POOL_SIZE);
-                exit(EXIT_FAILURE);
+                printf("error at route!\n");
+                break;
             }
         }
     }
 
+    free(arg);
+    arg = NULL;
+
     return NULL;
 }
 
-int router(void *p_client_socket, int conn_index) {
+int router(void *p_client_socket, unsigned short conn_index) {
     int retval = 0;
 
     int client_socket = *((int *)p_client_socket);
@@ -223,7 +232,7 @@ int router(void *p_client_socket, int conn_index) {
 
     if (strlen(request) == 0) {
         log_error("Request is empty\n");
-        retval = -1;
+        retval = 0;
         goto cleanup_request_buffer;
     }
 
@@ -373,22 +382,6 @@ int read_request(char **request_buffer, int client_socket) {
     (*request_buffer)[buffer_size] = '\0';
 
     return 0;
-}
-
-/* Reviewed: Fri 16. Feb 2024 */
-void threads_cleanup(unsigned short number) {
-    unsigned short i;
-    for (i = 0; i < number; i++) {
-        pthread_join(thread_pool[i], NULL);
-    }
-}
-
-/* Reviewed: Fri 16. Feb 2024 */
-void db_connection_pool_cleanup(unsigned short number) {
-    unsigned short i;
-    for (i = 0; i < number; i++) {
-        PQfinish(conn_pool[i]);
-    }
 }
 
 /* Reviewed: Fri 17. Feb 2024 */
