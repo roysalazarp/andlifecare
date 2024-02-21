@@ -27,7 +27,6 @@ int server_socket;
 
 PGconn *conn_pool[POOL_SIZE];
 pthread_t thread_pool[POOL_SIZE];
-pthread_key_t thread_index_key;
 pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
 
@@ -41,7 +40,7 @@ typedef struct {
 
 ENV env;
 
-void sigint_handler();
+void sigint_handler(int signo);
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
 int read_request(char **request_buffer, int client_socket);
@@ -94,12 +93,6 @@ int main() {
     db_connection_values[4] = env.DB_PORT;
     db_connection_values[5] = NULL;
 
-    if (pthread_key_create(&thread_index_key, NULL) != 0) {
-        log_error("Failed to create key for thread\n");
-        retval = -1;
-        goto main_cleanup;
-    }
-
     /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
         unsigned short *a = malloc(sizeof(unsigned short));
@@ -127,8 +120,15 @@ int main() {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof client_addr;
 
+        /** The while loop will wait at accept for a new client to connect */
         int client_socket;
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
+        if (client_socket == -1 && keep_running == 0) {
+            pthread_cond_signal(&thread_condition_var);
+            retval = 0;
+            goto main_cleanup;
+        }
+
         if (client_socket == -1) {
             log_error("Failed to create client socket\n");
             retval = -1;
@@ -144,6 +144,7 @@ int main() {
             goto main_cleanup;
         }
 
+        printf("- New request: enqueue fd %d\n", *p_c_s);
         enqueue(p_c_s);
 
         if (pthread_cond_signal(&thread_condition_var) != 0) {
@@ -167,49 +168,63 @@ main_cleanup:
 
     close(server_socket);
 
-    printf("Before pthread_join\n");
-
-    /*
-    pthread_exit(0);
     for (i = 0; i < POOL_SIZE; i++) {
-        pthread_join(thread_pool[i], NULL);
+        pthread_cond_signal(&thread_condition_var);
     }
-     */
 
-    printf("Exiting program\n");
+    for (i = 0; i < POOL_SIZE; i++) {
+        printf("(Thread %d) Cleaning up thread %lu\n", i, thread_pool[i]);
+
+        if (pthread_join(thread_pool[i], NULL) != 0) {
+            printf("Something wrong with pthread_join\n");
+        }
+    }
 
     return retval;
 }
 
 void *thread_function(void *arg) {
     unsigned short *thread_index = (unsigned short *)arg;
-
-    printf("%d\n", *thread_index);
-
-    /** TODO: handle pthread_setspecific error case */
-    pthread_setspecific(thread_index_key, thread_index);
+    pthread_t tid = pthread_self();
+    printf("(Thread %d) Setting up thread %lu\n", *thread_index, tid);
 
     while (1) {
         int *p_client_socket;
+
         if (pthread_mutex_lock(&thread_mutex) != 0) {
             /** TODO: cleanup */
         }
 
         if ((p_client_socket = dequeue()) == NULL) {
             pthread_cond_wait(&thread_condition_var, &thread_mutex);
+            if (keep_running == 0) {
+                pthread_mutex_unlock(&thread_mutex);
+                goto out;
+            }
+
             p_client_socket = dequeue();
+            printf("(Thread %d) Dequeueing(received signal)...\n", *thread_index);
+            goto skip_print;
         }
+
+        printf("(Thread %d) Dequeueing...\n", *thread_index);
+
+    skip_print:
 
         if (pthread_mutex_unlock(&thread_mutex) != 0) {
             /** TODO: cleanup */
         }
-        if (p_client_socket != NULL) {
+
+        if (p_client_socket != NULL && keep_running == 1) {
             if (router(p_client_socket, *thread_index) == -1) {
                 printf("error at route!\n");
                 break;
             }
         }
     }
+
+out:
+    printf("(Thread %d) Out of while loop\n", *thread_index);
 
     free(arg);
     arg = NULL;
@@ -404,9 +419,11 @@ unsigned int has_file_extension(const char *file_path, const char *extension) {
 }
 
 /* Reviewed: Fri 16. Feb 2024 */
-void sigint_handler() {
-    printf("\nReceived SIGINT, exiting...\n");
-    keep_running = 0;
+void sigint_handler(int signo) {
+    if (signo == SIGINT) {
+        printf("\nReceived SIGINT, exiting program...\n");
+        keep_running = 0;
+    }
 }
 
 /* Reviewed: Fri 17. Feb 2024 */
