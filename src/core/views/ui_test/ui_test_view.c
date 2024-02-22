@@ -6,7 +6,6 @@
 
 #include "core/core.h"
 #include "globals.h"
-#include "queue.h"
 #include "utils/utils.h"
 
 int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn);

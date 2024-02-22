@@ -1,17 +1,33 @@
 #!/bin/bash
 
+: "
++-----------------------------------------------------------------------------------+
+|   This project uses a bash script for compiling instead of a build system like    |
+|   make because the compile times are so short that there's no need to introduce   |
+|   an additional tool for partial compilation.                                     |
++-----------------------------------------------------------------------------------+
+                                                                \   ^__^
+                                                                 \  (oo)\_______
+                                                                    (__)\       )\/\
+                                                                        ||----w |
+                                                                        ||     ||                           
+"
+
 CC=gcc
 CFLAGS="-std=c89 -g -O3 -Wall -Wextra -Werror -pedantic -Wno-unused-variable -Wno-unused-parameter -Wno-declaration-after-statement -Wno-unused-but-set-variable"
 LDFLAGS="-I/usr/include/postgresql -lpq -largon2 -pthread"
 
 SRC_DIR="src"
+
 BUILD_DIR="build"
+
 BIN_DIR="$BUILD_DIR/bin"
 OBJ_DIR="$BUILD_DIR/obj"
 ASSEMBLY_DIR="$BUILD_DIR/asm"
 
-EXECUTABLE="$BIN_DIR/andlifecare"
 SOURCES=$(find "$SRC_DIR" -type f -name "*.c")
+
+EXECUTABLE="$BIN_DIR/andlifecare"
 OBJECTS=$(echo "$SOURCES" | sed "s|$SRC_DIR/|$OBJ_DIR/|g; s|\.c$|\.o|g")
 ASSEMBLY_FILES=$(echo "$SOURCES" | sed "s|$SRC_DIR/|$ASSEMBLY_DIR/|g; s|\.c$|\.s|g")
 
@@ -42,7 +58,6 @@ clean() {
     rm -rf "$BUILD_DIR"
 }
 
-# Clean build directories before building
 clean
 build
 

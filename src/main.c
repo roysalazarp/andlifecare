@@ -11,7 +11,6 @@
 #include <unistd.h>
 
 #include "globals.h"
-#include "queue.h"
 #include "utils/utils.h"
 #include "web/web.h"
 
@@ -30,6 +29,14 @@ pthread_t thread_pool[POOL_SIZE];
 pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
 
+typedef struct ClientSocketQueueNode {
+    struct ClientSocketQueueNode *next;
+    int *client_socket;
+} ClientSocketQueueNode;
+
+ClientSocketQueueNode *head_client_socket_queue = NULL;
+ClientSocketQueueNode *tail_client_socket_queue = NULL;
+
 typedef struct {
     char DB_NAME[12];
     char DB_USER[16];
@@ -46,18 +53,16 @@ int setup_server_socket(int *fd);
 int read_request(char **request_buffer, int client_socket);
 int router(void *p_client_socket, unsigned short conn_index);
 void *thread_function(void *arg);
-int print_colored_message(const char *hex_color, const char *format, ...);
 void print_banner();
+int print_colored_message(const char *hex_color, const char *format, ...);
+void enqueue_client_socket(int *client_socket);
+void *dequeue_client_socket();
 
 /* Reviewed: Fri 19. Feb 2024 */
 int main() {
     int retval = 0;
 
     unsigned short i;
-
-    for (i = 0; i < POOL_SIZE; i++) {
-        conn_pool[i] = NULL;
-    }
 
     print_banner();
 
@@ -66,12 +71,13 @@ int main() {
      * program gracefully for Valgrind to show the program report.
      */
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
-        log_error("Failed to set up signal handler\n");
+        fprintf(stderr, "Failed to set up signal handler for SIGINT\nError code: %d\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    if (load_values_from_file(&env, ".env.dev") == -1) {
-        log_error("Failed to load env variables from file\n");
+    const char env_file_path[] = ".env.dev";
+    if (load_values_from_file(&env, env_file_path) == -1) {
+        fprintf(stderr, "Failed to load env variables from file %s\nError code: %d\n", env_file_path, errno);
         retval = -1;
         goto main_cleanup;
     }
@@ -93,12 +99,21 @@ int main() {
     db_connection_values[4] = env.DB_PORT;
     db_connection_values[5] = NULL;
 
+    for (i = 0; i < POOL_SIZE; i++) {
+        conn_pool[i] = NULL;
+    }
+
     /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
-        unsigned short *a = malloc(sizeof(unsigned short));
-        *a = i;
-        if (pthread_create(&thread_pool[*a], NULL, &thread_function, a) != 0) {
-            log_error("Failed to create thread\n");
+        /**
+         * Thread might take some time time to create, but 'i' will keep mutating as the program runs,
+         * storing the value of 'i' in the heap at the time of iterating ensures that thread_function
+         * receives the correct value even when 'i' has moved on.
+         */
+        unsigned short *p_iteration = malloc(sizeof(unsigned short));
+        *p_iteration = i;
+        if (pthread_create(&thread_pool[*p_iteration], NULL, &thread_function, p_iteration) != 0) {
+            fprintf(stderr, "Failed to create thread at iteration n° %d\nError code: %d\n", *p_iteration, errno);
             retval = -1;
             goto main_cleanup;
         }
@@ -107,7 +122,7 @@ int main() {
     for (i = 0; i < POOL_SIZE; i++) {
         conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
         if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
-            log_error("Failed to create db connection pool\n");
+            fprintf(stderr, "Failed to create db connection pool at iteration n° %d\nError code: %d\n", i, errno);
             retval = -1;
             goto main_cleanup;
         }
@@ -130,31 +145,35 @@ int main() {
         }
 
         if (client_socket == -1) {
-            log_error("Failed to create client socket\n");
+            fprintf(stderr, "Failed to create client socket\nError code: %d\n", errno);
             retval = -1;
             goto main_cleanup;
         }
 
-        int *p_c_s = malloc(sizeof(int));
-        *p_c_s = client_socket;
+        /**
+         * Store fd number for client socket in the heap so it can be pointed by a queue data structure
+         * and used when it is needed.
+         */
+        int *p_client_socket = malloc(sizeof(int));
+        *p_client_socket = client_socket;
 
         if (pthread_mutex_lock(&thread_mutex) != 0) {
-            log_error("Failed to lock mutex\n");
+            fprintf(stderr, "Failed to lock pthread mutex\nError code: %d\n", errno);
             retval = -1;
             goto main_cleanup;
         }
 
-        printf("- New request: enqueue fd %d\n", *p_c_s);
-        enqueue(p_c_s);
+        printf("- New request: enqueue_client_socket client socket fd %d\n", *p_client_socket);
+        enqueue_client_socket(p_client_socket);
 
         if (pthread_cond_signal(&thread_condition_var) != 0) {
-            log_error("Failed to unlock mutex\n");
+            fprintf(stderr, "Failed to send pthread signal\nError code: %d\n", errno);
             retval = -1;
             goto main_cleanup;
         }
 
         if (pthread_mutex_unlock(&thread_mutex) != 0) {
-            log_error("Failed to unlock mutex\n");
+            fprintf(stderr, "Failed to unlock pthread mutex\nError code: %d\n", errno);
             retval = -1;
             goto main_cleanup;
         }
@@ -169,6 +188,10 @@ main_cleanup:
     close(server_socket);
 
     for (i = 0; i < POOL_SIZE; i++) {
+        /**
+         * At this point, the variable 'keep_running' is 0.
+         * Signal all threads to resume execution to perform cleanup.
+         */
         pthread_cond_signal(&thread_condition_var);
     }
 
@@ -176,17 +199,33 @@ main_cleanup:
         printf("(Thread %d) Cleaning up thread %lu\n", i, thread_pool[i]);
 
         if (pthread_join(thread_pool[i], NULL) != 0) {
-            printf("Something wrong with pthread_join\n");
+            fprintf(stderr, "Failed to join thread at position %d in the thread pool\nError code: %d\n", i, errno);
         }
     }
 
     return retval;
 }
 
+/**
+ * This function is intended to be passed to pthread_create to execute when a new thread is created.In this
+ * program, this same function is passed to all threads, resulting in each thread performing the same task:
+ * handling client connections to this HTTP server.
+ *
+ * Inside the while loop, the function waits to receive a signal indicating a new client connection. Once
+ * received, the connection is passed to the router for handling.
+ *
+ * TODO: Currently when router returns -1, the thread exists silently. Maybe there is a better way to deal
+ *       with such scenario.
+ *
+ * @param       arg A pointer to an unsigned short value indicating the thread's position in the thread pool.
+ *              It's used to assign a specific database connection from the connection pool to the thread.
+ *              Each thread is associated with a unique connection from the pool.
+ * @return      Always returns NULL
+ */
 void *thread_function(void *arg) {
-    unsigned short *thread_index = (unsigned short *)arg;
+    unsigned short *p_thread_index = (unsigned short *)arg;
     pthread_t tid = pthread_self();
-    printf("(Thread %d) Setting up thread %lu\n", *thread_index, tid);
+    printf("(Thread %d) Setting up thread %lu\n", *p_thread_index, tid);
 
     while (1) {
         int *p_client_socket;
@@ -195,19 +234,19 @@ void *thread_function(void *arg) {
             /** TODO: cleanup */
         }
 
-        if ((p_client_socket = dequeue()) == NULL) {
+        if ((p_client_socket = dequeue_client_socket()) == NULL) {
             pthread_cond_wait(&thread_condition_var, &thread_mutex);
             if (keep_running == 0) {
                 pthread_mutex_unlock(&thread_mutex);
                 goto out;
             }
 
-            p_client_socket = dequeue();
-            printf("(Thread %d) Dequeueing(received signal)...\n", *thread_index);
+            p_client_socket = dequeue_client_socket();
+            printf("(Thread %d) Dequeueing(received signal)...\n", *p_thread_index);
             goto skip_print;
         }
 
-        printf("(Thread %d) Dequeueing...\n", *thread_index);
+        printf("(Thread %d) Dequeueing...\n", *p_thread_index);
 
     skip_print:
 
@@ -215,19 +254,19 @@ void *thread_function(void *arg) {
             /** TODO: cleanup */
         }
 
-        if (p_client_socket != NULL && keep_running == 1) {
-            if (router(p_client_socket, *thread_index) == -1) {
-                printf("error at route!\n");
+        if (p_client_socket != NULL) {
+            if (router(p_client_socket, *p_thread_index) == -1) {
+                printf("router returned error!\n");
                 break;
             }
         }
     }
 
 out:
-    printf("(Thread %d) Out of while loop\n", *thread_index);
+    printf("(Thread %d) Out of while loop\n", *p_thread_index);
 
-    free(arg);
-    arg = NULL;
+    free(p_thread_index);
+    p_thread_index = NULL;
 
     return NULL;
 }
@@ -235,7 +274,12 @@ out:
 int router(void *p_client_socket, unsigned short conn_index) {
     int retval = 0;
 
+    /**
+     * At this point we don't need to hold the client_socket in heap anymore, we can work
+     * with it in the stack from now on
+     */
     int client_socket = *((int *)p_client_socket);
+
     free(p_client_socket);
     p_client_socket = NULL;
 
@@ -246,7 +290,7 @@ int router(void *p_client_socket, unsigned short conn_index) {
     }
 
     if (strlen(request) == 0) {
-        log_error("Request is empty\n");
+        fprintf(stderr, "Request is empty\nError code: %d\n", errno);
         retval = 0;
         goto cleanup_request_buffer;
     }
@@ -301,9 +345,6 @@ int router(void *p_client_socket, unsigned short conn_index) {
         }
     }
 
-    /**
-     * Routes start here
-     */
     if (strcmp(parsed_http_request.url, "/") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
             if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
@@ -362,7 +403,7 @@ int read_request(char **request_buffer, int client_socket) {
 
     *request_buffer = (char *)malloc((buffer_size * (sizeof **request_buffer)) + 1);
     if (*request_buffer == NULL) {
-        log_error("Failed to allocate memory for *request_buffer\n");
+        fprintf(stderr, "Failed to allocate memory for *request_buffer\nError code: %d\n", errno);
         return -1;
     }
 
@@ -375,9 +416,9 @@ int read_request(char **request_buffer, int client_socket) {
 
         if (chunk_read >= buffer_size) {
             buffer_size *= 2;
-            (*request_buffer) = realloc((*request_buffer), buffer_size);
-            if ((*request_buffer) == NULL) {
-                log_error("Failed to reallocate memory for *request_buffer\n");
+            *request_buffer = realloc((*request_buffer), buffer_size);
+            if (*request_buffer == NULL) {
+                fprintf(stderr, "Failed to reallocate memory for *request_buffer\nError code: %d\n", errno);
                 free(*request_buffer);
                 *request_buffer = NULL;
                 return -1;
@@ -388,7 +429,7 @@ int read_request(char **request_buffer, int client_socket) {
     }
 
     if (bytes_read == -1) {
-        log_error("Failed extract headers from *request_buffer\n");
+        fprintf(stderr, "Failed extract headers from *request_buffer\nError code: %d\n", errno);
         free(*request_buffer);
         *request_buffer = NULL;
         return -1;
@@ -450,18 +491,18 @@ int print_colored_message(const char *hex_color, const char *format, ...) {
     return 0;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
+/* Reviewed: Fri 22. Feb 2024 */
 int setup_server_socket(int *fd) {
     *fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (*fd == -1) {
-        log_error("Failed to create server socket\n");
+        fprintf(stderr, "Failed to create server socket\nError code: %d\n", errno);
         return -1;
     }
 
     int optname = 1;
     if (setsockopt(*fd, SOL_SOCKET, SO_REUSEADDR, &optname, sizeof(int)) == -1) {
-        log_error("Failed to set local address for immediately reuse upon socker closed\n");
+        fprintf(stderr, "Failed to set local address for immediately reuse upon socker closed\nError code: %d\n", errno);
         close(*fd);
         return -1;
     }
@@ -471,29 +512,58 @@ int setup_server_socket(int *fd) {
     /* IPv4 */
     server_addr.sin_family = AF_INET;
 
-    /**
-     * Convert the port number from host byte order to network byte order (big-endian)
-     */
+    /** Convert the port number from host byte order to network byte order (big-endian) */
     server_addr.sin_port = htons(PORT);
 
-    /*
-     * Listen on all available network interfaces (IPv4 addresses)
-     */
+    /** Listen on all available network interfaces (IPv4 addresses) */
     server_addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(*fd, (struct sockaddr *)&server_addr, sizeof server_addr) == -1) {
-        log_error("Failed to bind server socker to address and port\n");
+        fprintf(stderr, "Failed to bind server socker to adress(%d) and port(%d)\nError code: %d\n", server_addr.sin_addr.s_addr, server_addr.sin_port, errno);
         close(*fd);
         return -1;
     }
 
     if (listen(*fd, MAX_CONNECTIONS) == -1) {
-        log_error("Failed to set up server socker to listen for incoming connections\n");
+        fprintf(stderr, "Failed to set up server socker to listen for incoming connections\nError code: %d\n", errno);
         close(*fd);
         return -1;
     }
 
     return 0;
+}
+
+void enqueue_client_socket(int *client_socket) {
+    ClientSocketQueueNode *new_node = malloc(sizeof(ClientSocketQueueNode));
+    new_node->client_socket = client_socket;
+    new_node->next = NULL;
+
+    if (tail_client_socket_queue == NULL) {
+        head_client_socket_queue = new_node;
+    } else {
+        tail_client_socket_queue->next = new_node;
+    }
+
+    tail_client_socket_queue = new_node;
+}
+
+void *dequeue_client_socket() {
+    if (head_client_socket_queue == NULL) {
+        return NULL;
+    }
+
+    int *result = head_client_socket_queue->client_socket;
+    ClientSocketQueueNode *temp = head_client_socket_queue;
+    head_client_socket_queue = head_client_socket_queue->next;
+
+    if (head_client_socket_queue == NULL) {
+        tail_client_socket_queue = NULL;
+    }
+
+    free(temp);
+    temp = NULL;
+
+    return result;
 }
 
 /* Reviewed: Fri 16. Feb 2024 */
