@@ -1,19 +1,19 @@
-#include "utils/utils.h"
 #include <ctype.h>
+#include <errno.h>
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "utils/utils.h"
 #include "web/web.h"
 
-/* Reviewed: Fri 17. Feb 2024 */
 int web_utils_construct_response(char **response_buffer, const char *file_path, const char *response_headers) {
     char *absolute_path;
     absolute_path = (char *)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
     if (absolute_path == NULL) {
-        log_error("Failed to allocate memory for absolute_path\n");
+        fprintf(stderr, "Failed to allocate memory for absolute_path\nError code: %d\n", errno);
         return -1;
     }
 
@@ -36,14 +36,14 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
     size_t pre_rendering_response_length = (size_t)file_size + response_headers_length;
     *response_buffer = (char *)malloc(pre_rendering_response_length * (sizeof **response_buffer) + 1);
     if (*response_buffer == NULL) {
-        log_error("Failed to allocate memory for *response_buffer\n");
+        fprintf(stderr, "Failed to allocate memory for *response_buffer\nError code: %d\n", errno);
         free(absolute_path);
         absolute_path = NULL;
         return -1;
     }
 
     if (memcpy(*response_buffer, response_headers, response_headers_length) == NULL) {
-        log_error("Failed to copy response headers into response\n");
+        fprintf(stderr, "Failed to copy response headers into response\nError code: %d\n", errno);
         free(absolute_path);
         absolute_path = NULL;
         free(*response_buffer);
@@ -67,20 +67,19 @@ int web_utils_construct_response(char **response_buffer, const char *file_path, 
     return 0;
 }
 
-/* Reviewed: Fri 18. Feb 2024 */
-char ***web_utils_matrix_2d_allocation(char ***p_matrix, unsigned int level1_size, unsigned int level2_size) {
+char ***web_utils_matrix_2d_allocation(char ***p_matrix, unsigned short level1_size, unsigned short level2_size) {
     p_matrix = (char ***)malloc(level1_size * sizeof(char **));
     if (p_matrix == NULL) {
-        log_error("Failed to allocate memory for p_matrix level 1\n");
+        fprintf(stderr, "Failed to allocate memory for p_matrix level 1\nError code: %d\n", errno);
         return NULL;
     }
 
-    unsigned int i;
+    unsigned short i;
     for (i = 0; i < level1_size; ++i) {
         p_matrix[i] = (char **)malloc(level2_size * sizeof(char *));
         if (p_matrix[i] == NULL) {
-            log_error("Failed to allocate memory for p_matrix level 2\n");
-            unsigned int k;
+            fprintf(stderr, "Failed to allocate memory for p_matrix[%d] at level 2\nError code: %d\n", i, errno);
+            unsigned short k;
             for (k = 0; k < i; ++k) {
                 free(p_matrix[k]);
                 p_matrix[k] = NULL;
@@ -94,9 +93,8 @@ char ***web_utils_matrix_2d_allocation(char ***p_matrix, unsigned int level1_siz
     return p_matrix;
 }
 
-/* Reviewed: Fri 18. Feb 2024 */
-void web_utils_matrix_2d_free(char ***p_matrix, unsigned int level1_size) {
-    unsigned int i;
+void web_utils_matrix_2d_free(char ***p_matrix, unsigned short level1_size) {
+    unsigned short i;
 
     for (i = 0; i < level1_size; i++) {
         free(p_matrix[i]);
@@ -107,7 +105,6 @@ void web_utils_matrix_2d_free(char ***p_matrix, unsigned int level1_size) {
     p_matrix = NULL;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *http_request) {
     parsed_http_request->method = NULL;
     parsed_http_request->url = NULL;
@@ -116,57 +113,53 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
     parsed_http_request->http_version = NULL;
     parsed_http_request->headers = NULL;
 
-    /**
-     * Extract http request method
-     */
+    /** 1. Extract http request method */
     const char *method_end = strchr(http_request, ' ');
     size_t method_length = method_end - http_request;
     parsed_http_request->method = (char *)malloc(method_length * (sizeof parsed_http_request->method) + 1);
     if (parsed_http_request->method == NULL) {
-        log_error("Failed to allocate memory for parsed_http_request->method\n");
+        fprintf(stderr, "Failed to allocate memory for parsed_http_request->method\nError code: %d\n", errno);
         return -1;
     }
 
     if (memcpy(parsed_http_request->method, http_request, method_length) == NULL) {
+        fprintf(stderr, "Failed to copy method from http request into structure\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to copy method from http request into structure\n");
         return -1;
     }
 
     parsed_http_request->method[method_length] = '\0';
 
-    /**
-     * Extract http request url and url query params
-     */
+    /** 2. Extract http request url and 3. url query params */
     const char *url_start = method_end + 1;
     const char *url_end;
     if ((url_end = strchr(url_start, ' ')) == NULL) {
+        fprintf(stderr, "Failed to find char\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to find char\n");
         return -1;
     }
 
     const char *query_params_start = url_start;
 
-    int query_params_start_index = -1; /* we start assuming there isn't any query params */
-    /* iterate though a string until a whitespace if found */
+    int query_params_start_index = -1; /** We start assuming there isn't any query params */
+    /** Iterate until whitespace is found */
     while (!isspace((unsigned char)*query_params_start)) {
-        /* if a '?' char is found along the way, that is the start of the query params */
+        /** If a '?' char is found along the way, that's the start of the query params */
         if (*query_params_start == '?') {
             query_params_start_index = query_params_start - http_request;
             break;
         }
 
-        /* keep moving forward along the string */
+        /* Keep moving forward */
         query_params_start++;
     }
 
     size_t query_params_length = 0;
     if (query_params_start_index >= 0) {
-        query_params_length = url_end - (query_params_start + 1); /* skip '?' char at the beginning of query params */
+        query_params_length = url_end - (query_params_start + 1); /** Skip '?' char found at the beginning of query params */
         /**
-         * because we separate the 'http request url' and 'http request url query params', we set the end of the 'http request url'
-         * to where the 'http request url query params' start.
+         * Because we separate the url and url query params, we set
+         * the end of the url to where the url query params start
          */
         url_end = &http_request[query_params_start_index];
     }
@@ -175,14 +168,14 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
 
     parsed_http_request->url = (char *)malloc(url_len * (sizeof parsed_http_request->url) + 1);
     if (parsed_http_request->url == NULL) {
+        fprintf(stderr, "Failed to allocate memory for parsed_http_request->url\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to allocate memory for parsed_http_request->url\n");
         return -1;
     }
 
     if (memcpy(parsed_http_request->url, url_start, url_len) == NULL) {
+        fprintf(stderr, "Failed to copy url from http request into structure\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to copy url from http request into structure\n");
         return -1;
     }
 
@@ -191,91 +184,85 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
     if (query_params_length > 0) {
         parsed_http_request->query_params = (char *)malloc(query_params_length * (sizeof parsed_http_request->query_params) + 1);
         if (parsed_http_request->query_params == NULL) {
+            fprintf(stderr, "Failed to allocate memory for parsed_http_request->query_params\nError code: %d\n", errno);
             web_utils_http_request_free(parsed_http_request);
-            log_error("Failed to allocate memory for parsed_http_request->query_params\n");
             return -1;
         }
 
-        /* (query_params_start + 1) -> skip '?' char at the beginning of query params */
+        /** (query_params_start + 1) -> skip '?' char found at the beginning of query params */
         if (memcpy(parsed_http_request->query_params, (query_params_start + 1), query_params_length) == NULL) {
+            fprintf(stderr, "Failed to copy url query params from http request into structure\nError code: %d\n", errno);
             web_utils_http_request_free(parsed_http_request);
-            log_error("Failed to copy url query params from http request into structure\n");
             return -1;
         }
 
         parsed_http_request->query_params[query_params_length] = '\0';
     }
 
-    /**
-     * Extract http version from request
-     */
+    /** 4. Extract http version from request */
     char *http_version_start;
     if ((http_version_start = strchr(query_params_start, ' ')) == NULL) {
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to find char\n");
+        fprintf(stderr, "Failed to find char\nError code: %d\n", errno);
         return -1;
     }
 
-    http_version_start++; /* skip space */
+    http_version_start++; /* Skip space */
 
     char *http_version_end;
     if ((http_version_end = strstr(http_version_start, "\r\n")) == NULL) {
+        fprintf(stderr, "Failed to find string\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to find string\n");
         return -1;
     }
 
     size_t http_version_len = http_version_end - http_version_start;
     parsed_http_request->http_version = (char *)malloc(http_version_len * (sizeof parsed_http_request->http_version) + 1);
     if (parsed_http_request->http_version == NULL) {
+        fprintf(stderr, "Failed to allocate memory for parsed_http_request->http_version\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to allocate memory for parsed_http_request->http_version\n");
         return -1;
     }
 
     if (memcpy(parsed_http_request->http_version, http_version_start, http_version_len) == NULL) {
+        fprintf(stderr, "Failed to copy http version from http request into structure\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to copy http version from http request into structure\n");
         return -1;
     }
 
     parsed_http_request->http_version[http_version_len] = '\0';
 
-    /**
-     * Extract http request headers
-     */
-    char *headers_start = http_version_end + 2; /* skip "\r\n" */
+    /** 5. Extract http request headers */
+    char *headers_start = http_version_end + 2; /* Skip "\r\n" */
     char *headers_end;
     if ((headers_end = strstr(headers_start, "\r\n\r\n")) == NULL) {
+        fprintf(stderr, "Failed to find string\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to find string\n");
         return -1;
     }
 
     size_t headers_len = headers_end - headers_start;
     parsed_http_request->headers = (char *)malloc(headers_len * (sizeof parsed_http_request->headers) + 1);
     if (parsed_http_request->headers == NULL) {
+        fprintf(stderr, "Failed to allocate memory for parsed_http_request->headers\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to allocate memory for parsed_http_request->headers\n");
         return -1;
     }
 
     if (memcpy(parsed_http_request->headers, headers_start, headers_len) == NULL) {
+        fprintf(stderr, "Failed to copy headers from http request into structure\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to copy headers from http request into structure\n");
         return -1;
     }
 
     parsed_http_request->headers[headers_len] = '\0';
 
-    /**
-     * Extract http request body
-     */
-    char *body_start = headers_end + 4; /* skip "\r\n\r\n" */
+    /** 6. Extract http request body */
+    char *body_start = headers_end + 4; /* Skip "\r\n\r\n" */
     char *body_end;
     if ((body_end = strchr(body_start, '\0')) == NULL) {
+        fprintf(stderr, "Failed to find char\nError code: %d\n", errno);
         web_utils_http_request_free(parsed_http_request);
-        log_error("Failed to find char\n");
         return -1;
     }
 
@@ -283,14 +270,14 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
     if (body_length > 0) {
         parsed_http_request->body = (char *)malloc(body_length * (sizeof parsed_http_request->body) + 1);
         if (parsed_http_request->body == NULL) {
+            fprintf(stderr, "Failed to allocate memory for parsed_http_request->body\nError code: %d\n", errno);
             web_utils_http_request_free(parsed_http_request);
-            log_error("Failed to allocate memory for parsed_http_request->body\n");
             return -1;
         }
 
         if (memcpy(parsed_http_request->body, body_start, body_length) == NULL) {
+            fprintf(stderr, "Failed to copy request body from http request into structure\nError code: %d\n", errno);
             web_utils_http_request_free(parsed_http_request);
-            log_error("Failed to copy request body from http request into structure\n");
             return -1;
         }
 
@@ -300,7 +287,6 @@ int web_utils_parse_http_request(HttpRequest *parsed_http_request, const char *h
     return 0;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 void web_utils_http_request_free(HttpRequest *parsed_http_request) {
     free(parsed_http_request->method);
     parsed_http_request->method = NULL;
@@ -322,6 +308,7 @@ void web_utils_http_request_free(HttpRequest *parsed_http_request) {
 }
 
 int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
+    /** To avoid modifying the original string pointer, create a new one that can be freely modified */
     char *key = string;
 
     while (*key != '\0') {
@@ -329,8 +316,7 @@ int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
         size_t key_length = key_end - key;
 
         char *value_start = key_end + 1;
-        char *value_end;
-        value_end = strchr(value_start, '&');
+        char *value_end = strchr(value_start, '&');
         if (value_end == NULL) {
             value_end = strchr(value_start, '\0');
         }
@@ -340,7 +326,7 @@ int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
         if (strncmp(key, key_name, key_length) == 0) {
             *buffer = malloc(value_length + 1);
             if (*buffer == NULL) {
-                log_error("Failed to allocate memory for *buffer\n");
+                fprintf(stderr, "Failed to allocate memory for *buffer\nError code: %d\n", errno);
                 return -1;
             }
 
@@ -356,7 +342,7 @@ int web_utils_parse_value(char **buffer, const char key_name[], char *string) {
     }
 
     if (*buffer == NULL) {
-        log_error("Value not found per key\n");
+        fprintf(stderr, "Value not found per key\nError code: %d\n", errno);
         return -1;
     }
 

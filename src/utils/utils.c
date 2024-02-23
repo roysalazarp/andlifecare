@@ -10,29 +10,23 @@
 
 #define MAX_LINE_LENGTH 100
 
-void log_error(const char *message) {
-    perror(message);
-    fprintf(stderr, "Error code: %d\n", errno);
-}
-
-/* Reviewed: Fri 16. Feb 2024 */
 ssize_t calculate_file_size(char *absolute_file_path) {
     FILE *file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
-        log_error("Failed to open file\n");
+        fprintf(stderr, "Failed to open file\nError code: %d\n", errno);
         return -1;
     }
 
     if (fseek(file, 0, SEEK_END) == -1) {
-        log_error("Failed to move the 'file position indicator' to the end of the file\n");
+        fprintf(stderr, "Failed to move the 'file position indicator' to the end of the file\nError code: %d\n", errno);
         fclose(file);
         return -1;
     }
 
     long file_size = ftell(file);
     if (file_size == -1) {
-        log_error("Failed to determine the current 'file position indicator' of the file\n");
+        fprintf(stderr, "Failed to determine the current 'file position indicator' of the file\nError code: %d\n", errno);
         fclose(file);
         return -1;
     }
@@ -43,22 +37,21 @@ ssize_t calculate_file_size(char *absolute_file_path) {
     return file_size;
 }
 
-/* Reviewed: Fri 16. Feb 2024 */
 int read_file(char *buffer, char *absolute_file_path, size_t file_size) {
     FILE *file = fopen(absolute_file_path, "r");
 
     if (file == NULL) {
-        log_error("Failed to open file\n");
+        fprintf(stderr, "Failed to open file\nError code: %d\n", errno);
         return -1;
     }
 
     if (fread(buffer, sizeof(char), file_size, file) != file_size) {
         if (feof(file)) {
-            log_error("End of file reached before reading all elements\n");
+            fprintf(stderr, "End of file reached before reading all elements\nError code: %d\n", errno);
         }
 
         if (ferror(file)) {
-            perror("An error occurred during the fread operation");
+            fprintf(stderr, "An error occurred during the fread operation\nError code: %d\n", errno);
         }
 
         fclose(file);
@@ -70,24 +63,23 @@ int read_file(char *buffer, char *absolute_file_path, size_t file_size) {
     return 0;
 }
 
-/* Reviewed: Fri 16. Feb 2024 */
 int build_absolute_path(char *absolute_path_buffer, const char *path) {
     char *cwd;
     cwd = (char *)malloc(PATH_MAX * (sizeof *cwd));
     if (cwd == NULL) {
-        log_error("Failed to allocate memory for cwd\n");
+        fprintf(stderr, "Failed to allocate memory for cwd\nError code: %d\n", errno);
         return -1;
     }
 
     if (getcwd(cwd, PATH_MAX) == NULL) {
-        log_error("Failed to get current working directory\n");
+        fprintf(stderr, "Failed to get current working directory\nError code: %d\n", errno);
         free(cwd);
         cwd = NULL;
         return -1;
     }
 
     if (sprintf(absolute_path_buffer, "%s/%s", cwd, path) < 0) {
-        log_error("Absolute path truncated\n");
+        fprintf(stderr, "Absolute path truncated\nError code: %d\n", errno);
         free(cwd);
         cwd = NULL;
         return -1;
@@ -99,7 +91,6 @@ int build_absolute_path(char *absolute_path_buffer, const char *path) {
     return 0;
 }
 
-/* Reviewed: Fri 16. Feb 2024 */
 /**
  * @brief      Read values from a file into a structure. Ignores lines that start with '#' (comments).
  *             The values in the file must adhere to the following rules:
@@ -117,7 +108,7 @@ int load_values_from_file(void *structure, const char *file_path) {
     char *file_absolute_path;
     file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
     if (file_absolute_path == NULL) {
-        log_error("Failed to allocate memory for file_absolute_path\n");
+        fprintf(stderr, "Failed to allocate memory for file_absolute_path\nError code: %d\n", errno);
         return -1;
     }
 
@@ -135,7 +126,7 @@ int load_values_from_file(void *structure, const char *file_path) {
     file_absolute_path = NULL;
 
     if (file == NULL) {
-        log_error("Failed to open file\n");
+        fprintf(stderr, "Failed to open file\nError code: %d\n", errno);
         return -1;
     }
 

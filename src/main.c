@@ -14,39 +14,6 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
-#define MAX_CONNECTIONS 100
-#define PORT 8080
-
-#define PRINT_MESSAGE_COLOR "#0059ff"
-#define PRINT_MESSAGE_STATUS "#42ff62"
-
-volatile sig_atomic_t keep_running = 1;
-
-int server_socket;
-
-PGconn *conn_pool[POOL_SIZE];
-pthread_t thread_pool[POOL_SIZE];
-pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
-
-typedef struct ClientSocketQueueNode {
-    struct ClientSocketQueueNode *next;
-    int *client_socket;
-} ClientSocketQueueNode;
-
-ClientSocketQueueNode *head_client_socket_queue = NULL;
-ClientSocketQueueNode *tail_client_socket_queue = NULL;
-
-typedef struct {
-    char DB_NAME[12];
-    char DB_USER[16];
-    char DB_PASSWORD[9];
-    char DB_HOST[10];
-    char DB_PORT[5];
-} ENV;
-
-ENV env;
-
 void sigint_handler(int signo);
 unsigned int has_file_extension(const char *file_path, const char *extension);
 int setup_server_socket(int *fd);
@@ -58,7 +25,39 @@ int print_colored_message(const char *hex_color, const char *format, ...);
 void enqueue_client_socket(int *client_socket);
 void *dequeue_client_socket();
 
-/* Reviewed: Fri 19. Feb 2024 */
+typedef struct ClientSocketQueueNode {
+    struct ClientSocketQueueNode *next;
+    int *client_socket;
+} ClientSocketQueueNode;
+
+typedef struct {
+    char DB_NAME[12];
+    char DB_USER[16];
+    char DB_PASSWORD[9];
+    char DB_HOST[10];
+    char DB_PORT[5];
+} ENV;
+
+#define PRINT_MESSAGE_COLOR "#0059ff"
+#define PRINT_MESSAGE_STATUS "#42ff62"
+
+#define MAX_CONNECTIONS 100
+#define PORT 8080
+
+volatile sig_atomic_t keep_running = 1;
+
+PGconn *conn_pool[POOL_SIZE];
+pthread_t thread_pool[POOL_SIZE];
+pthread_mutex_t thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
+
+ClientSocketQueueNode *head_client_socket_queue = NULL;
+ClientSocketQueueNode *tail_client_socket_queue = NULL;
+
+ENV env;
+
+int server_socket;
+
 int main() {
     int retval = 0;
 
@@ -99,10 +98,6 @@ int main() {
     db_connection_values[4] = env.DB_PORT;
     db_connection_values[5] = NULL;
 
-    for (i = 0; i < POOL_SIZE; i++) {
-        conn_pool[i] = NULL;
-    }
-
     /** Create threads and db connection pool */
     for (i = 0; i < POOL_SIZE; i++) {
         /**
@@ -120,6 +115,10 @@ int main() {
     }
 
     for (i = 0; i < POOL_SIZE; i++) {
+        conn_pool[i] = NULL;
+    }
+
+    for (i = 0; i < POOL_SIZE; i++) {
         conn_pool[i] = PQconnectdbParams(db_connection_keywords, db_connection_values, 0);
         if (PQstatus(conn_pool[i]) != CONNECTION_OK) {
             fprintf(stderr, "Failed to create db connection pool at iteration n° %d\nError code: %d\n", i, errno);
@@ -131,19 +130,26 @@ int main() {
     print_colored_message(PRINT_MESSAGE_COLOR, "DB connection established: ");
     print_colored_message(PRINT_MESSAGE_STATUS, "Success!\n");
 
-    while (keep_running) {
+    while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof client_addr;
 
         /** The while loop will wait at accept for a new client to connect */
         int client_socket;
         client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len);
-        if (client_socket == -1 && keep_running == 0) {
+        /**
+         * When a signal to exit the program is received, accept will error with -1. To verify that
+         * client_socket being -1 isn't because of program termination, check whether the program
+         * has received a signal to exit.
+         */
+        if (keep_running == 0) {
+            /** Send signal to threads to resume execusion so they can proceed to cleanup */
             pthread_cond_signal(&thread_condition_var);
             retval = 0;
             goto main_cleanup;
         }
 
+        /** At this point, we know that client_socket being -1 wouldn't have been caused by program termination */
         if (client_socket == -1) {
             fprintf(stderr, "Failed to create client socket\nError code: %d\n", errno);
             retval = -1;
@@ -214,9 +220,6 @@ main_cleanup:
  * Inside the while loop, the function waits to receive a signal indicating a new client connection. Once
  * received, the connection is passed to the router for handling.
  *
- * TODO: Currently when router returns -1, the thread exists silently. Maybe there is a better way to deal
- *       with such scenario.
- *
  * @param       arg A pointer to an unsigned short value indicating the thread's position in the thread pool.
  *              It's used to assign a specific database connection from the connection pool to the thread.
  *              Each thread is associated with a unique connection from the pool.
@@ -234,8 +237,12 @@ void *thread_function(void *arg) {
             /** TODO: cleanup */
         }
 
+        /** Check queue for client request */
         if ((p_client_socket = dequeue_client_socket()) == NULL) {
-            pthread_cond_wait(&thread_condition_var, &thread_mutex);
+            /** At this point, we know the queue was empty, so hold thread execusion */
+            pthread_cond_wait(&thread_condition_var, &thread_mutex); /** On hold, waiting to receive a signal... */
+            /** Signal to proceed with execusion has been sent */
+
             if (keep_running == 0) {
                 pthread_mutex_unlock(&thread_mutex);
                 goto out;
@@ -255,6 +262,10 @@ void *thread_function(void *arg) {
         }
 
         if (p_client_socket != NULL) {
+            /*
+             * If router errors with -1, the thread exits silently.
+             * (Consider whether there is a better way to handle this scenario)
+             */
             if (router(p_client_socket, *p_thread_index) == -1) {
                 printf("router returned error!\n");
                 break;
@@ -397,7 +408,6 @@ socket_cleanup:
     return retval;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 int read_request(char **request_buffer, int client_socket) {
     size_t buffer_size = 1024;
 
@@ -440,7 +450,6 @@ int read_request(char **request_buffer, int client_socket) {
     return 0;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 /**
  * @return 0 if the file path has the specified extension, 1 otherwise.
  */
@@ -459,7 +468,6 @@ unsigned int has_file_extension(const char *file_path, const char *extension) {
     return 1;
 }
 
-/* Reviewed: Fri 16. Feb 2024 */
 void sigint_handler(int signo) {
     if (signo == SIGINT) {
         printf("\nReceived SIGINT, exiting program...\n");
@@ -467,7 +475,6 @@ void sigint_handler(int signo) {
     }
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 int print_colored_message(const char *hex_color, const char *format, ...) {
     /** Ensure the hex_color starts with '#' and extract decimal values */
     if (hex_color[0] != '#' || strlen(hex_color) != 7) {
@@ -491,7 +498,6 @@ int print_colored_message(const char *hex_color, const char *format, ...) {
     return 0;
 }
 
-/* Reviewed: Fri 22. Feb 2024 */
 int setup_server_socket(int *fd) {
     *fd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -566,7 +572,6 @@ void *dequeue_client_socket() {
     return result;
 }
 
-/* Reviewed: Fri 16. Feb 2024 */
 void print_banner() {
     /*
     print_colored_message("#ff5100", "▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃\n");

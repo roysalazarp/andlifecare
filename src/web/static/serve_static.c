@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,20 +9,17 @@
 #include "globals.h"
 #include "utils/utils.h"
 
-/* Reviewed: Fri 17. Feb 2024 */
 int web_serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
     char *file_absolute_path;
     file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
     if (file_absolute_path == NULL) {
-        log_error("Failed to allocate memory for file_absolute_path\n");
+        fprintf(stderr, "Failed to allocate memory for file_absolute_path\nError code: %d\n", errno);
         return -1;
     }
 
     file_absolute_path[0] = '\0';
 
-    /**
-     * if the path IS NOT the root url remove the leading slash
-     */
+    /** Remove the leading slash if path is NOT the root url (home page) */
     if (strcmp(path, "/") != 0) {
         path++;
     }
@@ -41,7 +39,7 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     size_t response_length = ((size_t)(file_size)) + response_headers_length;
     response = (char *)malloc(response_length * (sizeof *response) + 1);
     if (response == NULL) {
-        log_error("Failed to allocate memory for response\n");
+        fprintf(stderr, "Failed to allocate memory for response\nError code: %d\n", errno);
         free(file_absolute_path);
         file_absolute_path = NULL;
         return -1;
@@ -67,7 +65,7 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     file_absolute_path = NULL;
 
     if (send(client_socket, response, response_length, 0) == -1) {
-        log_error("Failed send HTTP response\n");
+        fprintf(stderr, "Failed send HTTP response\nError code: %d\n", errno);
         free(response);
         response = NULL;
         return -1;
@@ -79,19 +77,18 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
     return 0;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 int construct_public_route_file_path(char **path_buffer, char *url) {
     char public_folder[] = "/src/web/pages/public";
     char file_extension[] = ".html";
 
     *path_buffer = (char *)malloc((strlen(public_folder) + strlen(url) + strlen(file_extension)) * (sizeof **path_buffer) + 1);
     if (*path_buffer == NULL) {
-        log_error("Failed to allocate memory for *path_buffer\n");
+        fprintf(stderr, "Failed to allocate memory for *path_buffer\nError code: %d\n", errno);
         return -1;
     }
 
     if (sprintf(*path_buffer, "%s%s%s", public_folder, url, file_extension) < 0) {
-        log_error("Failed to construct public route file path\n");
+        fprintf(stderr, "Failed to construct public route file path\nError code: %d\n", errno);
         free(*path_buffer);
         *path_buffer = NULL;
         return -1;
@@ -100,7 +97,6 @@ int construct_public_route_file_path(char **path_buffer, char *url) {
     return 0;
 }
 
-/* Reviewed: Fri 17. Feb 2024 */
 unsigned int requested_public_route(const char *url) {
     char *public_routes[] = {"/home", "/about", NULL};
 

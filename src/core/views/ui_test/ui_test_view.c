@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <libpq-fe.h>
 #include <linux/limits.h>
 #include <stdlib.h>
@@ -11,7 +12,6 @@
 int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn);
 int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn);
 
-/* Reviewed: Fri 18. Feb 2024 */
 int core_view_ui_test(UiTestView *ui_test_view_data_buffer, int client_socket, int conn_index) {
     PGconn *conn = conn_pool[conn_index];
 
@@ -26,12 +26,11 @@ int core_view_ui_test(UiTestView *ui_test_view_data_buffer, int client_socket, i
     return 0;
 }
 
-/* Reviewed: Fri 18. Feb 2024 */
 int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     char *sql_query_absolute_path;
     sql_query_absolute_path = (char *)malloc(PATH_MAX * (sizeof *sql_query_absolute_path) + 1);
     if (sql_query_absolute_path == NULL) {
-        log_error("Failed to allocate memory for sql_query_absolute_path\n");
+        fprintf(stderr, "Failed to allocate memory for sql_query_absolute_path\nError code: %d\n", errno);
         return -1;
     }
 
@@ -65,7 +64,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     users_query = NULL;
 
     if (PQresultStatus(users_result) != PGRES_TUPLES_OK) {
-        log_error(PQerrorMessage(conn));
+        fprintf(stderr, "%s\nError code: %d\n", PQerrorMessage(conn), errno);
         return -1;
     }
 
@@ -81,7 +80,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         size_t column_name_length = strlen(column_name);
 
         if (memcpy(ui_test_view_data_buffer->users_data.columns[i], column_name, column_name_length) == NULL) {
-            log_error("Failed to copy column_name into memory buffer\n");
+            fprintf(stderr, "Failed to copy column_name into memory buffer\nError code: %d\n", errno);
             return -1;
         }
 
@@ -90,7 +89,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
 
     ui_test_view_data_buffer->users_data.users = (User *)malloc(ui_test_view_data_buffer->users_data.rows * sizeof(User));
     if (ui_test_view_data_buffer->users_data.users == NULL) {
-        log_error("Failed to allocate memory for ui_test_view_data_buffer->users_data.users\n");
+        fprintf(stderr, "Failed to allocate memory for ui_test_view_data_buffer->users_data.users\nError code: %d\n", errno);
         PQclear(users_result);
         return -1;
     }
@@ -99,7 +98,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *id = PQgetvalue(users_result, i, 0);
         size_t id_length = strlen(id);
         if (memcpy(ui_test_view_data_buffer->users_data.users[i].id, id, id_length) == NULL) {
-            log_error("Failed to copy id into memory buffer");
+            fprintf(stderr, "Failed to copy id into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         (ui_test_view_data_buffer->users_data.users)[i].id[id_length] = '\0';
@@ -107,7 +106,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *email = PQgetvalue(users_result, i, 1);
         size_t email_length = strlen(email);
         if (memcpy(ui_test_view_data_buffer->users_data.users[i].email, email, email_length) == NULL) {
-            log_error("Failed to copy email into memory buffer");
+            fprintf(stderr, "Failed to copy email into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->users_data.users[i].email[email_length] = '\0';
@@ -115,7 +114,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *country = PQgetvalue(users_result, i, 2);
         size_t country_length = strlen(country);
         if (memcpy(ui_test_view_data_buffer->users_data.users[i].country, country, country_length) == NULL) {
-            log_error("Failed to copy country into memory buffer");
+            fprintf(stderr, "Failed to copy country into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->users_data.users[i].country[country_length] = '\0';
@@ -123,7 +122,7 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *full_name = PQgetvalue(users_result, i, 3);
         size_t full_name_length = strlen(full_name);
         if (memcpy(ui_test_view_data_buffer->users_data.users[i].full_name, full_name, full_name_length) == NULL) {
-            log_error("Failed to copy full_name into memory buffer");
+            fprintf(stderr, "Failed to copy full_name into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->users_data.users[i].full_name[full_name_length] = '\0';
@@ -134,12 +133,11 @@ int query_users(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     return 0;
 }
 
-/* Reviewed: Fri 18. Feb 2024 */
 int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     char *sql_query_absolute_path;
     sql_query_absolute_path = (char *)malloc(PATH_MAX * (sizeof *sql_query_absolute_path) + 1);
     if (sql_query_absolute_path == NULL) {
-        log_error("Failed to allocate memory for sql_query_absolute_path\n");
+        fprintf(stderr, "Failed to allocate memory for sql_query_absolute_path\nError code: %d\n", errno);
         return -1;
     }
 
@@ -173,7 +171,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
     countries_query = NULL;
 
     if (PQresultStatus(countries_result) != PGRES_TUPLES_OK) {
-        log_error(PQerrorMessage(conn));
+        fprintf(stderr, "%s\nError code: %d\n", PQerrorMessage(conn), errno);
         return -1;
     }
 
@@ -189,7 +187,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         size_t column_name_length = strlen(column_name);
 
         if (memcpy(ui_test_view_data_buffer->countries_data.columns[i], column_name, column_name_length) == NULL) {
-            log_error("Failed to copy column_name into memory buffer\n");
+            fprintf(stderr, "Failed to copy column_name into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->countries_data.columns[i][column_name_length] = '\0';
@@ -197,7 +195,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
 
     ui_test_view_data_buffer->countries_data.countries = (Country *)malloc(sizeof(Country) * ui_test_view_data_buffer->countries_data.rows);
     if (ui_test_view_data_buffer->countries_data.countries == NULL) {
-        log_error("Failed to allocate memory for ui_test_view_data_buffer->countries_data.countries\n");
+        fprintf(stderr, "Failed to allocate memory for ui_test_view_data_buffer->countries_data.countries\nError code: %d\n", errno);
         PQclear(countries_result);
         return -1;
     }
@@ -210,7 +208,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *country_name = PQgetvalue(countries_result, i, 1);
         size_t country_name_length = strlen(country_name);
         if (memcpy(ui_test_view_data_buffer->countries_data.countries[i].country_name, country_name, country_name_length) == NULL) {
-            log_error("Failed to copy country_name into memory buffer");
+            fprintf(stderr, "Failed to copy country_name into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->countries_data.countries[i].country_name[country_name_length] = '\0';
@@ -218,7 +216,7 @@ int query_countries(UiTestView *ui_test_view_data_buffer, PGconn *conn) {
         char *iso3 = PQgetvalue(countries_result, i, 2);
         size_t iso3_length = strlen(iso3);
         if (memcpy(ui_test_view_data_buffer->countries_data.countries[i].iso3, iso3, iso3_length) == NULL) {
-            log_error("Failed to copy iso3 into memory buffer");
+            fprintf(stderr, "Failed to copy iso3 into memory buffer\nError code: %d\n", errno);
             return -1;
         }
         ui_test_view_data_buffer->countries_data.countries[i].iso3[iso3_length] = '\0';

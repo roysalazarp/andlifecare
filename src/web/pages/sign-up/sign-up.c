@@ -1,4 +1,5 @@
 #include <argon2.h>
+#include <errno.h>
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -10,7 +11,6 @@
 #include "core/core.h"
 #include "globals.h"
 #include "template_engine/template_engine.h"
-#include "utils/utils.h"
 #include "web/web.h"
 
 #define SALT_SIZE 16
@@ -20,7 +20,6 @@ int verify_password(const char *password, const char *hash);
 int hash_password(const char *password, char *hash, size_t hash_len);
 void generate_salt(char *salt, size_t salt_size);
 
-/* Reviewed: Fri 17. Feb 2024 */
 int web_page_sign_up_get(int client_socket, HttpRequest *request) {
     /** TODO: improve http response headers */
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
@@ -37,7 +36,7 @@ int web_page_sign_up_get(int client_socket, HttpRequest *request) {
     size_t post_rendering_response_length = strlen(response) * sizeof(char);
 
     if (send(client_socket, response, post_rendering_response_length, 0) == -1) {
-        log_error("Failed send HTTP response\n");
+        fprintf(stderr, "Failed send HTTP response\nError code: %d\n", errno);
         free(response);
         response = NULL;
         return -1;
@@ -117,7 +116,7 @@ int web_page_sign_up_create_user_post(int client_socket, HttpRequest *request) {
     remember = NULL;
 
     if (send(client_socket, response_headers, strlen(response_headers), 0) == -1) {
-        log_error("Failed send HTTP response\n");
+        fprintf(stderr, "Failed send HTTP response\nError code: %d\n", errno);
         return -1;
     }
 
@@ -155,7 +154,7 @@ int hash_password(const char *password, char *hashed_password_buffer, size_t has
     unsigned int threads = 4;
 
     if (argon2_hash(time_cost, memory_cost, threads, password, strlen(password), salt, SALT_SIZE, hashed_password_buffer, hashed_password_buffer_length, NULL, 0, Argon2_i, ARGON2_VERSION_NUMBER) != ARGON2_OK) {
-        log_error("Failed to hash password\n");
+        fprintf(stderr, "Failed to hash password\nError code: %d\n", errno);
         return -1;
     }
 

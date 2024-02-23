@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -9,7 +10,6 @@
 #include "core/core.h"
 #include "globals.h"
 #include "template_engine/template_engine.h"
-#include "utils/utils.h"
 #include "web/web.h"
 
 int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index) {
@@ -40,11 +40,11 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
      * u_t_ stands for users_table_
      */
     char ***u_t_column_names = NULL;
-    unsigned int u_t_columns = 4;
-    unsigned int u_t_column_cells = 1;
+    unsigned short u_t_columns = 4;
+    unsigned short u_t_column_cells = 1;
     u_t_column_names = web_utils_matrix_2d_allocation(u_t_column_names, u_t_columns, u_t_column_cells);
     if (u_t_column_names == NULL) {
-        log_error("Failed to allocate memory for u_t_column_names\n");
+        fprintf(stderr, "Failed to allocate memory for u_t_column_names\nError code: %d\n", errno);
         retval = -1;
         goto clean_response_buffer;
     }
@@ -82,7 +82,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     for (i = 0; i < amount_of_users; ++i) {
         users[i] = web_utils_matrix_2d_allocation(users[i], u_t_columns, u_t_column_cells);
         if (users[i] == NULL) {
-            log_error("Failed to allocate memory for users[i]\n");
+            fprintf(stderr, "Failed to allocate memory for users[%d]\nError code: %d\n", i, errno);
             amount_of_users_to_clean_up = i + 1;
             retval = -1;
             goto clean_u_t_users;
@@ -107,7 +107,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         users[i][3][0] = (char *)malloc(country_length * sizeof(char) + 1);
 
         if (users[i][0][0] == NULL || users[i][1][0] == NULL || users[i][2][0] == NULL || users[i][3][0] == NULL) {
-            log_error("Failed to allocate memory for users[i]\n");
+            fprintf(stderr, "Failed to allocate memory for users[%d]\nError code: %d\n", i, errno);
             amount_of_users_with_values_to_clean_up = i + 1;
             retval = -1;
             goto clean_u_t_users_values;
@@ -117,7 +117,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     for (i = 0; i < amount_of_users; ++i) {
         size_t id_length = strlen(ui_test_view_data.users_data.users[i].id);
         if (memcpy(users[i][0][0], ui_test_view_data.users_data.users[i].id, id_length) == NULL) {
-            log_error("Failed to copy id into memory buffer\n");
+            fprintf(stderr, "Failed to copy id into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
@@ -125,7 +125,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
         size_t full_name_length = strlen(ui_test_view_data.users_data.users[i].full_name);
         if (memcpy(users[i][1][0], ui_test_view_data.users_data.users[i].full_name, full_name_length) == NULL) {
-            log_error("Failed to copy full_name into memory buffer\n");
+            fprintf(stderr, "Failed to copy full_name into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
@@ -133,7 +133,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
         size_t email_length = strlen(ui_test_view_data.users_data.users[i].email);
         if (memcpy(users[i][2][0], ui_test_view_data.users_data.users[i].email, email_length) == NULL) {
-            log_error("Failed to copy email into memory buffer\n");
+            fprintf(stderr, "Failed to copy email into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
@@ -141,7 +141,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
         size_t country_length = strlen(ui_test_view_data.users_data.users[i].country);
         if (memcpy(users[i][3][0], ui_test_view_data.users_data.users[i].country, country_length) == NULL) {
-            log_error("Failed to copy country into memory buffer\n");
+            fprintf(stderr, "Failed to copy country into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
@@ -159,8 +159,8 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         goto clean_u_t_users_values;
     }
 
-    unsigned int c_t_columns = 1;
-    unsigned int c_t_column_cells = 1;
+    unsigned short c_t_columns = 1;
+    unsigned short c_t_column_cells = 1;
 
     char ****countries;
     countries = malloc(amount_of_countries * (sizeof ***countries));
@@ -177,7 +177,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     for (i = 0; i < amount_of_countries; ++i) {
         countries[i] = web_utils_matrix_2d_allocation(countries[i], c_t_columns, c_t_column_cells);
         if (countries[i] == NULL) {
-            log_error("Failed to allocate memory for countries[i]\n");
+            fprintf(stderr, "Failed to allocate memory for countries[%d]\nError code: %d\n", i, errno);
             amount_of_countries_to_clean_up = i + 1;
             retval = -1;
             goto clean_c_t_countries;
@@ -193,7 +193,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         countries[i][0][0] = (char *)malloc(country_name_length * sizeof(char) + 1);
 
         if (countries[i][0][0] == NULL) {
-            log_error("Failed to allocate memory for countries[i]\n");
+            fprintf(stderr, "Failed to allocate memory for countries[%d]\nError code: %d\n", i, errno);
             amount_of_countries_with_values_to_clean_up = i + 1;
             retval = -1;
             goto clean_c_t_countries_values;
@@ -203,7 +203,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     for (i = 0; i < amount_of_countries; ++i) {
         size_t country_name_length = strlen(ui_test_view_data.countries_data.countries[i].country_name);
         if (memcpy(countries[i][0][0], ui_test_view_data.countries_data.countries[i].country_name, country_name_length) == NULL) {
-            log_error("Failed to copy country_name into memory buffer\n");
+            fprintf(stderr, "Failed to copy country_name into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_c_t_countries_values;
         }
@@ -218,7 +218,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     size_t post_rendering_response_length = strlen(response) * sizeof(char);
 
     if (send(client_socket, response, post_rendering_response_length, 0) == -1) {
-        log_error("Failed send HTTP response\n");
+        fprintf(stderr, "Failed send HTTP response\nError code: %d\n", errno);
         retval = -1;
         goto clean_c_t_countries_values;
     }

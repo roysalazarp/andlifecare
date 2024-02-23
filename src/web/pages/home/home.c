@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <linux/limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -9,10 +10,8 @@
 #include "core/core.h"
 #include "globals.h"
 #include "template_engine/template_engine.h"
-#include "utils/utils.h"
 #include "web/web.h"
 
-/* Reviewed: Fri 17. Feb 2024 */
 int web_page_home_get(int client_socket, HttpRequest *request) {
     /** TODO: improve http response headers */
     char response_headers[] = "HTTP/1.1 200 OK\r\n"
@@ -35,7 +34,7 @@ int web_page_home_get(int client_socket, HttpRequest *request) {
     size_t post_rendering_response_length = strlen(response) * sizeof(char);
 
     if (send(client_socket, response, post_rendering_response_length, 0) == -1) {
-        log_error("Failed send HTTP response\n");
+        fprintf(stderr, "Failed send HTTP response\nError code: %d\n", errno);
         free(response);
         response = NULL;
         return -1;

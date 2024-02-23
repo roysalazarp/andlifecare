@@ -4,7 +4,6 @@
 
 #include "core/core.h"
 
-/* Reviewed: Fri 18. Feb 2024 */
 void core_utils_view_ui_test_free(UiTestView *ui_test_view_data_buffer) {
     free(ui_test_view_data_buffer->users_data.users);
     ui_test_view_data_buffer->users_data.users = NULL;
@@ -12,7 +11,6 @@ void core_utils_view_ui_test_free(UiTestView *ui_test_view_data_buffer) {
     ui_test_view_data_buffer->countries_data.countries = NULL;
 }
 
-/* Reviewed: Fri 18. Feb 2024 */
 void core_utils_print_query_result(PGresult *result) {
     const int num_columns = PQnfields(result);
     const int num_rows = PQntuples(result);
