@@ -1,16 +1,15 @@
 #!/bin/bash
 
-# Check if required arguments are provided
 if [ "$#" -ne 4 ]; then
-    echo "Usage: $0 <migration_folder> <host> <database> <user>"
+    echo "Usage: $0 <migration-folder> <db-host> <db-port> <db-name> <db-user>"
     exit 1
 fi
 
-# Assign command-line arguments to variables
 MIGRATION_FOLDER="$1"
-HOST="$2"
-DATABASE="$3"
-USER="$4"
+DB_HOST="$2"
+DB_PORT="$3"
+DB_NAME="$4"
+DB_USER="$5"
 
 # Check if the migration folder exists
 if [ ! -d "$MIGRATION_FOLDER" ]; then
@@ -22,14 +21,13 @@ fi
 cd "$MIGRATION_FOLDER" || exit
 
 # Find and sort SQL migration files
-MIGRATION_FILES=$(find . -type f -name "*.sql" | sort)
+migration_files=$(find . -type f -name "*.sql" | sort)
 
 # Loop through and run each migration
-for FILE in $MIGRATION_FILES; do
-    echo "Running migration: $FILE"
-    psql -h "$HOST" -d "$DATABASE" -U "$USER" -f "$FILE"
-    # Add any additional connection parameters (-h, -d, -U) as needed
-    # Replace "$HOST", "$DATABASE", and "$USER" with your actual database connection details
+for migration_file in $migration_files; do
+    echo "Running migration: $migration_file"
+    psql -h $DB_HOST -p $DB_PORT -d $DB_NAME -U $DB_USER -f $migration_file
+
     if [ $? -ne 0 ]; then
         echo "Error running migration. Exiting."
         exit 1

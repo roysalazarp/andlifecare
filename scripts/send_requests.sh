@@ -1,18 +1,30 @@
 #!/bin/bash
 
-# Define the URL of your web server
-# URL="http://localhost:8080"  # Change this to your server's URL
-URL="http://localhost:8080/ui-test"  # Change this to your server's URL
+: "
++-----------------------------------------------------------------------------------+
+|   This script sends (n) HTTP requests simultaneously, it is used for testing the  |
+|   web server's performance.                                                       |
++-----------------------------------------------------------------------------------+
+                                                                \   ^__^
+                                                                 \  (oo)\_______
+                                                                    (__)\       )\/\
+                                                                        ||----w |
+                                                                        ||     ||                           
+"
 
-# Define the number of simultaneous requests
-NUM_REQUESTS=1000
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <endpoint> <num_requests>"
+    exit 1
+fi
 
-# Function to send a single request in background
+ENDPOINT="$1"
+NUM_REQUESTS="$2"
+
 send_request() {
-    curl --tlsv1.2 -s -o /dev/null "$URL" > /dev/null 2>&1
+    curl --tlsv1.2 -s -o /dev/null "$ENDPOINT" > /dev/null 2>&1
 }
 
-# Send multiple requests simultaneously
+# Send requests simultaneously
 for ((i=0; i<NUM_REQUESTS; i++)); do
     send_request &
 done
