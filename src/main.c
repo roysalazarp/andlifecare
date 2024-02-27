@@ -54,10 +54,6 @@ pthread_cond_t thread_condition_var = PTHREAD_COND_INITIALIZER;
 ClientSocketQueueNode *head_client_socket_queue = NULL;
 ClientSocketQueueNode *tail_client_socket_queue = NULL;
 
-ENV env;
-
-int server_socket;
-
 int main() {
     int retval = 0;
 
@@ -74,6 +70,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    ENV env;
     const char env_file_path[] = ".env.dev";
     if (load_values_from_file(&env, env_file_path) == -1) {
         fprintf(stderr, "Failed to load env variables from file %s\nError code: %d\n", env_file_path, errno);
@@ -81,6 +78,7 @@ int main() {
         goto main_cleanup;
     }
 
+    int server_socket;
     if (setup_server_socket(&server_socket) == -1) {
         retval = -1;
         goto main_cleanup;
