@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ "$#" -ne 4 ]; then
+if [ "$#" -ne 5 ]; then
     echo "Usage: $0 <migration-folder> <db-host> <db-port> <db-name> <db-user>"
     exit 1
 fi
