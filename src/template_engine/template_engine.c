@@ -30,7 +30,7 @@ char *te_substring_location_find(const char *substring, const char *string, size
         }
     }
 
-    fprintf(stderr, "Couldn't find the substring\nError code: %d\n", errno);
+    printf("Couldn't find the substring\n");
     return NULL;
 }
 
@@ -120,47 +120,75 @@ int te_string_copy_into_all_buffers(const char *string, char **buffer_array, siz
 int te_single_substring_swap(char *substring_to_remove, char *substring_to_add, char **string) {
     char *substring_to_remove_address = te_substring_location_find(substring_to_remove, *string, 0, 1);
     if (substring_to_remove_address == NULL) {
-        return -1;
+        /**
+         * If this is a recursive call, it might be that there is not more instances to swap, otherwise
+         * the substring was never found inside the string.
+         */
+        return 0;
     }
 
     if (te_substring_copy_into_string_at_memory_space(substring_to_add, string, substring_to_remove_address, substring_to_remove_address + strlen(substring_to_remove)) == -1) {
         return -1;
     }
 
+    /** Recursion: Maybe there is more locations in string where we need to swap substring_to_remove for substring_to_add */
+    /*
+    if (te_single_substring_swap(substring_to_remove, substring_to_add, string) == -1) {
+        return -1;
+    }
+    */
+
     return 0;
 }
 
-/* TODO: This function needs simplifying, it is quite difficult to follow */
-int te_multiple_substring_swap(char *opening_token, char *closing_token, size_t number_of_values, char ***substrings_to_add, char **string, size_t number_of_times) {
-    /** 1. Find out the length of the relevant 'reference block' inside the string */
+int te_copy_substring_block(char **buffer, size_t tokens_positions[2], char *opening_token, char *closing_token, char **string) {
     char *open_token_address = te_substring_location_find(opening_token, *string, 0, 1);
     size_t block_start_position = (open_token_address + strlen(opening_token)) - *string;
 
     char *close_token_address = te_substring_location_find(closing_token, *string, block_start_position, 1);
     size_t block_end_position = close_token_address - *string;
 
+    if (tokens_positions != NULL) {
+        tokens_positions[0] = open_token_address - *string;
+        tokens_positions[1] = block_end_position;
+    }
+
     size_t length = block_end_position - block_start_position;
 
-    /** 2. Make a copy of 'reference block' (we'll call it, the 'working block') */
-    char *working_block;
-    working_block = (char *)malloc(length * (sizeof *working_block) + 1);
-    if (working_block == NULL) {
-        fprintf(stderr, "Failed to allocate memory for working_block\nError code: %d\n", errno);
+    *buffer = (char *)malloc(length * (sizeof **buffer) + 1);
+    if (*buffer == NULL) {
+        fprintf(stderr, "Failed to allocate memory for *buffer\nError code: %d\n", errno);
         return -1;
     }
 
-    working_block[0] = '\0';
+    (*buffer)[0] = '\0';
 
-    if (memcpy(working_block, open_token_address + strlen(opening_token), length) == NULL) {
+    if (memcpy(*buffer, open_token_address + strlen(opening_token), length) == NULL) {
         fprintf(stderr, "Failed copy string\nError code: %d\n", errno);
+        free(*buffer);
+        *buffer = NULL;
+        return -1;
+    }
+
+    (*buffer)[length] = '\0';
+
+    return 0;
+}
+
+int te_multiple_substring_swap(char *opening_token, char *closing_token, size_t number_of_values, char ***substrings_to_add, char **string, size_t number_of_times) {
+    /** 1. Make a copy of reference block found inside the string (we'll call it, the 'working block') */
+    char *working_block;
+    size_t tokens_positions[2];
+    if (te_copy_substring_block(&working_block, tokens_positions, opening_token, closing_token, string) == -1) {
         free(working_block);
         working_block = NULL;
         return -1;
     }
 
-    working_block[length] = '\0';
+    char *open_token_address = (*string) + tokens_positions[0];
+    char *close_token_address = (*string) + tokens_positions[1];
 
-    /** 3. Make multiple copies of the 'working block', (we'll call it, the 'working copies')  */
+    /** 2. Make multiple copies of the 'working block', (we'll call it, the 'working copies')  */
     char **working_copies = (char **)malloc(number_of_times * sizeof(char *));
     if (working_copies == NULL) {
         fprintf(stderr, "Failed to allocate memory for working_copies\nError code: %d\n", errno);
@@ -179,13 +207,13 @@ int te_multiple_substring_swap(char *opening_token, char *closing_token, size_t 
     free(working_block);
     working_block = NULL;
 
-    /** 4. Render 'working copies' with the values provided at 'substrings_to_add' */
+    /** 3. Render 'working copies' with the values provided at 'substrings_to_add' */
     size_t i;
     size_t j;
     for (i = 0; i < number_of_times; ++i) {
         for (j = 0; j < number_of_values; ++j) {
             /**
-             * 4.1 Render iterating working copy:
+             * 3.1 Render iterating working copy:
              *     We expect &working_copies[i] to point to a string that contains a substring we need to replace
              *     with the value of substrings_to_add[i][j]. The substring we're looking to replace resembles the
              *     opening_token.
@@ -239,7 +267,7 @@ int te_multiple_substring_swap(char *opening_token, char *closing_token, size_t 
         }
     }
 
-    /** 5. Combine all 'rendered working copies' */
+    /** 4. Combine all 'rendered working copies' */
     size_t total_length = 0;
     for (i = 0; i < number_of_times; ++i) {
         total_length += strlen(working_copies[i]);
@@ -262,7 +290,7 @@ int te_multiple_substring_swap(char *opening_token, char *closing_token, size_t 
 
     te_buffer_array_free(working_copies, number_of_times);
 
-    /** 6. Swap 'rendered working copies' into specified 'reference block' */
+    /** 5. Swap 'rendered working copies' into specified 'reference block' */
     if (te_substring_copy_into_string_at_memory_space(rendered_working_copies, string, open_token_address, close_token_address + strlen(closing_token)) == -1) {
         free(rendered_working_copies);
         rendered_working_copies = NULL;

@@ -9,7 +9,7 @@
 #include "globals.h"
 #include "utils/utils.h"
 
-int web_serve_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
+int web_static(int client_socket, char *path, const char *response_headers, size_t response_headers_length) {
     char *file_absolute_path;
     file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
     if (file_absolute_path == NULL) {
@@ -70,6 +70,8 @@ int web_serve_static(int client_socket, char *path, const char *response_headers
         response = NULL;
         return -1;
     }
+
+    close(client_socket);
 
     free(response);
     response = NULL;

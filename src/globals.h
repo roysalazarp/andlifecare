@@ -3,7 +3,7 @@
 
 #include <libpq-fe.h>
 
-#define POOL_SIZE 70
+#define POOL_SIZE 3
 extern PGconn *conn_pool[POOL_SIZE];
 
 #endif

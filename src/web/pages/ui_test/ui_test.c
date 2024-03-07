@@ -10,19 +10,20 @@
 #include "core/core.h"
 #include "globals.h"
 #include "template_engine/template_engine.h"
+#include "utils/utils.h"
 #include "web/web.h"
 
-int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index) {
+int web_ui_test_get(int client_socket, HttpRequest *request, int conn_index) {
     int retval = 0;
 
     unsigned int i;
     unsigned int j;
     unsigned int k;
 
-    UiTestView ui_test_view_data;
-    if (core_view_ui_test(&ui_test_view_data, client_socket, conn_index) == -1) {
+    UiTestResult ui_test_result;
+    if (core_ui_test(&ui_test_result, client_socket, conn_index) == -1) {
         retval = -1;
-        goto clean_view_data;
+        goto clean_data;
     }
 
     /** TODO: improve http response headers */
@@ -30,11 +31,31 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
                               "Content-Type: text/html\r\n"
                               "\r\n";
 
-    char *response;
-    if (web_utils_construct_response(&response, "src/web/pages/ui_test/ui-test.html", response_headers) == -1) {
-        retval = -1;
-        goto clean_response_buffer;
+    char *template;
+    if (read_file_from_path_relative_to_project_root(&template, "src/web/pages/ui_test/ui-test.html") == -1) {
+        free(template);
+        template = NULL;
+        return -1;
     }
+
+    char *response;
+    response = (char *)malloc((strlen(response_headers) + strlen(template)) * (sizeof *response) + 1);
+    if (response == NULL) {
+        fprintf(stderr, "Failed to allocate memory for response\nError code: %d\n", errno);
+        return -1;
+    }
+
+    if (sprintf(response, "%s%s", response_headers, template) < 0) {
+        fprintf(stderr, "Failed to construct response\nError code: %d\n", errno);
+        free(template);
+        template = NULL;
+        free(response);
+        response = NULL;
+        return -1;
+    }
+
+    free(template);
+    template = NULL;
 
     /**
      * u_t_ stands for users_table_
@@ -51,7 +72,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
     for (i = 0; i < u_t_columns; i++) {
         for (j = 0; j < u_t_column_cells; j++) {
-            u_t_column_names[i][j] = ui_test_view_data.users_data.columns[i];
+            u_t_column_names[i][j] = ui_test_result.users_data.columns[i];
         }
     }
 
@@ -60,7 +81,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         goto clean_u_t_column_names;
     }
 
-    unsigned int amount_of_users = ui_test_view_data.users_data.rows;
+    unsigned int amount_of_users = ui_test_result.users_data.rows;
 
     if (te_multiple_substring_swap("{{ for->users_rows }}", "{{ end for->users_rows }}", 0, NULL, &response, amount_of_users) == -1) {
         retval = -1;
@@ -91,10 +112,10 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
     unsigned int amount_of_users_with_values_to_clean_up = amount_of_users;
     for (i = 0; i < amount_of_users; ++i) {
-        size_t id_length = strlen(ui_test_view_data.users_data.users[i].id);
-        size_t full_name_length = strlen(ui_test_view_data.users_data.users[i].full_name);
-        size_t email_length = strlen(ui_test_view_data.users_data.users[i].email);
-        size_t country_length = strlen(ui_test_view_data.users_data.users[i].country);
+        size_t id_length = strlen(ui_test_result.users_data.users[i].id);
+        size_t full_name_length = strlen(ui_test_result.users_data.users[i].full_name);
+        size_t email_length = strlen(ui_test_result.users_data.users[i].email);
+        size_t country_length = strlen(ui_test_result.users_data.users[i].country);
 
         users[i][0][0] = NULL;
         users[i][1][0] = NULL;
@@ -115,32 +136,32 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     }
 
     for (i = 0; i < amount_of_users; ++i) {
-        size_t id_length = strlen(ui_test_view_data.users_data.users[i].id);
-        if (memcpy(users[i][0][0], ui_test_view_data.users_data.users[i].id, id_length) == NULL) {
+        size_t id_length = strlen(ui_test_result.users_data.users[i].id);
+        if (memcpy(users[i][0][0], ui_test_result.users_data.users[i].id, id_length) == NULL) {
             fprintf(stderr, "Failed to copy id into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
         users[i][0][0][id_length] = '\0';
 
-        size_t full_name_length = strlen(ui_test_view_data.users_data.users[i].full_name);
-        if (memcpy(users[i][1][0], ui_test_view_data.users_data.users[i].full_name, full_name_length) == NULL) {
+        size_t full_name_length = strlen(ui_test_result.users_data.users[i].full_name);
+        if (memcpy(users[i][1][0], ui_test_result.users_data.users[i].full_name, full_name_length) == NULL) {
             fprintf(stderr, "Failed to copy full_name into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
         users[i][1][0][full_name_length] = '\0';
 
-        size_t email_length = strlen(ui_test_view_data.users_data.users[i].email);
-        if (memcpy(users[i][2][0], ui_test_view_data.users_data.users[i].email, email_length) == NULL) {
+        size_t email_length = strlen(ui_test_result.users_data.users[i].email);
+        if (memcpy(users[i][2][0], ui_test_result.users_data.users[i].email, email_length) == NULL) {
             fprintf(stderr, "Failed to copy email into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
         }
         users[i][2][0][email_length] = '\0';
 
-        size_t country_length = strlen(ui_test_view_data.users_data.users[i].country);
-        if (memcpy(users[i][3][0], ui_test_view_data.users_data.users[i].country, country_length) == NULL) {
+        size_t country_length = strlen(ui_test_result.users_data.users[i].country);
+        if (memcpy(users[i][3][0], ui_test_result.users_data.users[i].country, country_length) == NULL) {
             fprintf(stderr, "Failed to copy country into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_u_t_users_values;
@@ -153,7 +174,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         }
     }
 
-    unsigned int amount_of_countries = ui_test_view_data.countries_data.rows;
+    unsigned int amount_of_countries = ui_test_result.countries_data.rows;
     if (te_multiple_substring_swap("{{ for->countries_rows }}", "{{ end for->countries_rows }}", 0, NULL, &response, amount_of_countries) == -1) {
         retval = -1;
         goto clean_u_t_users_values;
@@ -186,7 +207,7 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
 
     unsigned int amount_of_countries_with_values_to_clean_up = amount_of_countries;
     for (i = 0; i < amount_of_countries; ++i) {
-        size_t country_name_length = strlen(ui_test_view_data.countries_data.countries[i].country_name);
+        size_t country_name_length = strlen(ui_test_result.countries_data.countries[i].country_name);
 
         countries[i][0][0] = NULL;
 
@@ -201,8 +222,8 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
     }
 
     for (i = 0; i < amount_of_countries; ++i) {
-        size_t country_name_length = strlen(ui_test_view_data.countries_data.countries[i].country_name);
-        if (memcpy(countries[i][0][0], ui_test_view_data.countries_data.countries[i].country_name, country_name_length) == NULL) {
+        size_t country_name_length = strlen(ui_test_result.countries_data.countries[i].country_name);
+        if (memcpy(countries[i][0][0], ui_test_result.countries_data.countries[i].country_name, country_name_length) == NULL) {
             fprintf(stderr, "Failed to copy country_name into memory buffer\nError code: %d\n", errno);
             retval = -1;
             goto clean_c_t_countries_values;
@@ -222,6 +243,8 @@ int web_page_ui_test_get(int client_socket, HttpRequest *request, int conn_index
         retval = -1;
         goto clean_c_t_countries_values;
     }
+
+    close(client_socket);
 
 clean_c_t_countries_values:
     for (i = 0; i < amount_of_countries_with_values_to_clean_up; ++i) {
@@ -264,8 +287,8 @@ clean_response_buffer:
     free(response);
     response = NULL;
 
-clean_view_data:
-    core_utils_view_ui_test_free(&ui_test_view_data);
+clean_data:
+    core_utils_ui_test_free(&ui_test_result);
 
     return retval;
 }

@@ -9,64 +9,6 @@
 #include "utils/utils.h"
 #include "web/web.h"
 
-int web_utils_construct_response(char **response_buffer, const char *file_path, const char *response_headers) {
-    char *absolute_path;
-    absolute_path = (char *)malloc(PATH_MAX * (sizeof *absolute_path) + 1);
-    if (absolute_path == NULL) {
-        fprintf(stderr, "Failed to allocate memory for absolute_path\nError code: %d\n", errno);
-        return -1;
-    }
-
-    absolute_path[0] = '\0';
-
-    if (build_absolute_path(absolute_path, file_path) == -1) {
-        free(absolute_path);
-        absolute_path = NULL;
-        return -1;
-    }
-
-    ssize_t file_size = calculate_file_size(absolute_path);
-    if (file_size == -1) {
-        free(absolute_path);
-        absolute_path = NULL;
-        return -1;
-    }
-
-    size_t response_headers_length = strlen(response_headers) * sizeof(char);
-    size_t pre_rendering_response_length = (size_t)file_size + response_headers_length;
-    *response_buffer = (char *)malloc(pre_rendering_response_length * (sizeof **response_buffer) + 1);
-    if (*response_buffer == NULL) {
-        fprintf(stderr, "Failed to allocate memory for *response_buffer\nError code: %d\n", errno);
-        free(absolute_path);
-        absolute_path = NULL;
-        return -1;
-    }
-
-    if (memcpy(*response_buffer, response_headers, response_headers_length) == NULL) {
-        fprintf(stderr, "Failed to copy response headers into response\nError code: %d\n", errno);
-        free(absolute_path);
-        absolute_path = NULL;
-        free(*response_buffer);
-        *response_buffer = NULL;
-        return -1;
-    }
-
-    if (read_file(*response_buffer + response_headers_length, absolute_path, file_size) == -1) {
-        free(absolute_path);
-        absolute_path = NULL;
-        free(*response_buffer);
-        *response_buffer = NULL;
-        return -1;
-    }
-
-    free(absolute_path);
-    absolute_path = NULL;
-
-    (*response_buffer)[pre_rendering_response_length] = '\0';
-
-    return 0;
-}
-
 char ***web_utils_matrix_2d_allocation(char ***p_matrix, unsigned short level1_size, unsigned short level2_size) {
     p_matrix = (char ***)malloc(level1_size * sizeof(char **));
     if (p_matrix == NULL) {

@@ -1,6 +1,6 @@
 /**
  * Run a migration on this sql file with the default postgres user
- * ❯ sudo -u postgres psql -f 20240124190000.sql
+ * ❯ sudo -u postgres psql -f init.sql
  */
 
 DO $$ 

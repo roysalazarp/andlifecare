@@ -1,3 +1,4 @@
+{{ component->sign_up_page }}
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -26,8 +27,6 @@
                 <label for="repeat_password"><b>Repeat Password</b></label>
                 <input type="password" placeholder="Repeat Password" name="repeat_password" required />
 
-                <label> <input type="checkbox" checked="checked" name="remember" style="margin-bottom: 15px" /> Remember me </label>
-
                 <p>By creating an account you agree to our <a href="#" style="color: dodgerblue">Terms & Privacy</a>.</p>
 
                 <div>
@@ -38,3 +37,12 @@
         </form>
     </body>
 </html>
+{{ end component->sign_up_page }}
+
+{{ component->error_messages }}
+<ul>
+    {{ for->message_item }}
+    <li>{{ for->message_item->v0 }}</li>
+    {{ end for->message_item }}
+</ul>
+{{ end component->error_messages }}

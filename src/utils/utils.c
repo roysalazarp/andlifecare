@@ -63,7 +63,7 @@ int read_file(char *buffer, char *absolute_file_path, size_t file_size) {
     return 0;
 }
 
-int build_absolute_path(char *absolute_path_buffer, const char *path) {
+int build_absolute_path(char *absolute_path_buffer, const char *path_relative_to_project_root) {
     char *cwd;
     cwd = (char *)malloc(PATH_MAX * (sizeof *cwd));
     if (cwd == NULL) {
@@ -78,7 +78,7 @@ int build_absolute_path(char *absolute_path_buffer, const char *path) {
         return -1;
     }
 
-    if (sprintf(absolute_path_buffer, "%s/%s", cwd, path) < 0) {
+    if (sprintf(absolute_path_buffer, "%s/%s", cwd, path_relative_to_project_root) < 0) {
         fprintf(stderr, "Absolute path truncated\nError code: %d\n", errno);
         free(cwd);
         cwd = NULL;
@@ -87,6 +87,48 @@ int build_absolute_path(char *absolute_path_buffer, const char *path) {
 
     free(cwd);
     cwd = NULL;
+
+    return 0;
+}
+
+int read_file_from_path_relative_to_project_root(char **buffer, const char *file_path_relative_to_project_root) {
+    char *file_absolute_path;
+    file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
+    if (file_absolute_path == NULL) {
+        fprintf(stderr, "Failed to allocate memory for file_absolute_path\nError code: %d\n", errno);
+        return -1;
+    }
+
+    file_absolute_path[0] = '\0';
+
+    if (build_absolute_path(file_absolute_path, file_path_relative_to_project_root) == -1) {
+        free(file_absolute_path);
+        file_absolute_path = NULL;
+        return -1;
+    }
+
+    ssize_t file_size = calculate_file_size(file_absolute_path);
+
+    *buffer = (char *)malloc(file_size * (sizeof **buffer) + 1);
+    if (*buffer == NULL) {
+        fprintf(stderr, "Failed to allocate memory for *buffer\nError code: %d\n", errno);
+        free(file_absolute_path);
+        file_absolute_path = NULL;
+        return -1;
+    }
+
+    if (read_file(*buffer, file_absolute_path, file_size) == -1) {
+        free(file_absolute_path);
+        file_absolute_path = NULL;
+        free(*buffer);
+        *buffer = NULL;
+        return -1;
+    }
+
+    (*buffer)[file_size] = '\0';
+
+    free(file_absolute_path);
+    file_absolute_path = NULL;
 
     return 0;
 }
@@ -101,10 +143,10 @@ int build_absolute_path(char *absolute_path_buffer, const char *path) {
  *                     e.g. =helloworld
  *
  * @param[out] structure A structure with fixed-size string fields for each value in the file.
- * @param      file_path The path to the file from project root.
+ * @param      file_path_relative_to_project_root The path to the file from project root.
  * @return     The amount of values read if success, -1 otherwise.
  */
-int load_values_from_file(void *structure, const char *file_path) {
+int load_values_from_file(void *structure, const char *file_path_relative_to_project_root) {
     char *file_absolute_path;
     file_absolute_path = (char *)malloc(PATH_MAX * (sizeof *file_absolute_path) + 1);
     if (file_absolute_path == NULL) {
@@ -114,7 +156,7 @@ int load_values_from_file(void *structure, const char *file_path) {
 
     file_absolute_path[0] = '\0';
 
-    if (build_absolute_path(file_absolute_path, file_path) == -1) {
+    if (build_absolute_path(file_absolute_path, file_path_relative_to_project_root) == -1) {
         free(file_absolute_path);
         file_absolute_path = NULL;
         return -1;

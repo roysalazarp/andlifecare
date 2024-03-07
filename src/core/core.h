@@ -33,11 +33,23 @@ typedef struct {
 typedef struct {
     UsersData users_data;
     CountriesData countries_data;
-} UiTestView;
+} UiTestResult;
 
-int core_view_ui_test(UiTestView *ui_test_view_data_buffer, int client_socket, int conn_index);
+int core_ui_test(UiTestResult *result, int client_socket, int conn_index);
 
-void core_utils_view_ui_test_free(UiTestView *ui_test_view_data);
-void core_utils_print_query_result(PGresult *result);
+void core_utils_ui_test_free(UiTestResult *result);
+void core_utils_print_query_result(PGresult *query_result);
+
+typedef struct {
+    char *email;
+    char *password;
+    char *repeat_password;
+} SignUpCreateUserInput;
+
+typedef struct {
+    char session_id[37];
+} SignUpCreateUserResult;
+
+int core_sign_up_create_user(SignUpCreateUserResult *result, SignUpCreateUserInput *input, int client_socket, int conn_index);
 
 #endif

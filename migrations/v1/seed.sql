@@ -1,13 +1,3 @@
-CREATE TABLE IF NOT EXISTS app.countries (
-    id SERIAL PRIMARY KEY,
-    iso CHAR(2) NOT NULL UNIQUE,
-    name VARCHAR(80) NOT NULL,
-    nicename VARCHAR(80) NOT NULL,
-    iso3 CHAR(3) DEFAULT NULL,
-    numcode SMALLINT DEFAULT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
 
 INSERT INTO app.countries (id, iso, name, nicename, iso3, numcode) VALUES
     (1, 'AF', 'AFGHANISTAN', 'Afghanistan', 'AFG', 4),
@@ -251,22 +241,63 @@ INSERT INTO app.countries (id, iso, name, nicename, iso3, numcode) VALUES
     (239, 'ZW', 'ZIMBABWE', 'Zimbabwe', 'ZWE', 716)
 ON CONFLICT (iso) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS app.users (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),             -- 36 bytes
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
+INSERT INTO app.users (email, password) VALUES
+    ('test@example.com', 'password'),
+    ('john.doe@example.com', 'password'),
+    ('jane.smith@example.com', 'password'),
+    ('alice.johnson@example.com', 'password')
+ON CONFLICT (email) DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS app.users_info  (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id uuid NOT NULL UNIQUE REFERENCES app.users(id),
-    first_name VARCHAR(255) NOT NULL,
-    last_name VARCHAR(255) NOT NULL,
-    country_id INT NOT NULL REFERENCES app.countries(id),
-    phone_code VARCHAR(10) NOT NULL,
-    phone_number VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
+INSERT INTO app.users_info (user_id, first_name, last_name, country_id, phone_code, phone_number) VALUES
+    (
+        (SELECT id FROM app.users WHERE email = 'test@example.com'),
+        'Test',
+        'McTest',
+        199, -- Spain in app.countries
+        '+34',
+        '64565887'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'john.doe@example.com'),
+        'John',
+        'Doe',
+        72, -- Finland in app.countries
+        '+358',
+        '442356767'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'jane.smith@example.com'),
+        'Jane',
+        'Smith',
+        225, -- United Kingdom in app.countries
+        '+44',
+        '2071234567'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'alice.johnson@example.com'),
+        'Alice',
+        'Johnson',
+        73, -- France in app.countries
+        '+33',
+        '109758351'
+    )
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO app.users_sessions (user_id, expires_at) VALUES
+    (
+        (SELECT id FROM app.users WHERE email = 'test@example.com'),
+         NOW() + INTERVAL '1 hour'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'john.doe@example.com'),
+         NOW() + INTERVAL '1 hour'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'jane.smith@example.com'),
+         NOW() + INTERVAL '1 hour'
+    ),
+    (
+        (SELECT id FROM app.users WHERE email = 'alice.johnson@example.com'),
+         NOW() + INTERVAL '1 hour'
+    )
+ON CONFLICT (user_id) DO NOTHING;

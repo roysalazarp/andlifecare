@@ -295,7 +295,7 @@ int router(void *p_client_socket, unsigned short conn_index) {
     char *request = NULL;
     if (read_request(&request, client_socket) == -1) {
         retval = -1;
-        goto socket_cleanup;
+        goto cleanup_request_buffer;
     }
 
     if (strlen(request) == 0) {
@@ -316,7 +316,7 @@ int router(void *p_client_socket, unsigned short conn_index) {
                                   "Content-Type: text/css\r\n"
                                   "\r\n";
 
-        if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
+        if (web_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
             retval = -1;
             goto cleanup_parsed_request;
         }
@@ -328,7 +328,7 @@ int router(void *p_client_socket, unsigned short conn_index) {
                                   "Content-Type: application/javascript\r\n"
                                   "\r\n";
 
-        if (web_serve_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
+        if (web_static(client_socket, parsed_http_request.url, response_headers, strlen(response_headers)) == -1) {
             retval = -1;
             goto cleanup_parsed_request;
         }
@@ -347,7 +347,7 @@ int router(void *p_client_socket, unsigned short conn_index) {
                                       "Content-Type: text/html\r\n"
                                       "\r\n";
 
-            if (web_serve_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
+            if (web_static(client_socket, public_route, response_headers, strlen(response_headers)) == -1) {
                 retval = -1;
                 goto cleanup;
             }
@@ -356,34 +356,34 @@ int router(void *p_client_socket, unsigned short conn_index) {
 
     if (strcmp(parsed_http_request.url, "/") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
-            if (web_page_home_get(client_socket, &parsed_http_request) == -1) {
+            if (web_home_get(client_socket, &parsed_http_request) == -1) {
                 retval = -1;
                 goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
-            if (web_page_sign_up_get(client_socket, &parsed_http_request) == -1) {
+            if (web_sign_up_get(client_socket, &parsed_http_request) == -1) {
                 retval = -1;
                 goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/sign-up/create-user") == 0) {
         if (strcmp(parsed_http_request.method, "POST") == 0) {
-            if (web_page_sign_up_create_user_post(client_socket, &parsed_http_request) == -1) {
+            if (web_sign_up_create_user_post(client_socket, &parsed_http_request, conn_index) == -1) {
                 retval = -1;
                 goto cleanup;
             }
         }
     } else if (strcmp(parsed_http_request.url, "/ui-test") == 0) {
         if (strcmp(parsed_http_request.method, "GET") == 0) {
-            if (web_page_ui_test_get(client_socket, &parsed_http_request, conn_index) == -1) {
+            if (web_ui_test_get(client_socket, &parsed_http_request, conn_index) == -1) {
                 retval = -1;
                 goto cleanup;
             }
         }
     } else {
-        if (web_page_not_found(client_socket, &parsed_http_request) == -1) {
+        if (web_not_found(client_socket, &parsed_http_request) == -1) {
             retval = -1;
             goto cleanup;
         }
@@ -399,9 +399,6 @@ cleanup_parsed_request:
 cleanup_request_buffer:
     free(request);
     request = NULL;
-
-socket_cleanup:
-    close(client_socket);
 
     return retval;
 }
